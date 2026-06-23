@@ -3,7 +3,10 @@ credentials.json
 token.json
 
 # Database
-backend/db/finance_tracker.db
+*.db
+*.db-shm
+*.db-wal
+*.storage
 
 # Runtime state
 backend/banks/santander_last_run.txt
