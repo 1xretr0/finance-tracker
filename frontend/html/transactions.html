@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transactions — Finance Tracker</title>
+    <link rel="stylesheet" href="/css/styles.css">
+    <link rel="stylesheet" href="/css/transactions.css">
+</head>
+<body>
+    <header>
+        <h1>Finance Tracker</h1>
+        <nav>
+            <a href="/">Overview</a>
+            <a href="/categorize">Categorize</a>
+            <a href="/transactions" class="active">Transactions</a>
+        </nav>
+    </header>
+
+    <main>
+        <div class="transactions-header">
+            <h2>Transaction Details</h2>
+            <div class="quarter-filter">
+                <button class="quarter-btn" data-quarter="1">Q1</button>
+                <button class="quarter-btn" data-quarter="2">Q2</button>
+                <button class="quarter-btn" data-quarter="3">Q3</button>
+                <button class="quarter-btn" data-quarter="4">Q4</button>
+            </div>
+        </div>
+
+        <div class="tables-grid">
+            <section class="table-section">
+                <h3>Income</h3>
+                <table id="income-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Amount</th>
+                            <th>Source</th>
+                            <th>Category</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </section>
+
+            <section class="table-section">
+                <h3>Expenses</h3>
+                <table id="expense-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Amount</th>
+                            <th>Description</th>
+                            <th>Category</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </section>
+        </div>
+    </main>
+
+    <script src="/js/common.js"></script>
+    <script src="/js/transactions.js"></script>
+</body>
+</html>

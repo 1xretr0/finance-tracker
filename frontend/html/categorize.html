@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Categorize — Finance Tracker</title>
+    <link rel="stylesheet" href="/css/styles.css">
+    <link rel="stylesheet" href="/css/categorize.css">
+</head>
+<body>
+    <header>
+        <h1>Finance Tracker</h1>
+        <nav>
+            <a href="/">Overview</a>
+            <a href="/categorize" class="active">Categorize</a>
+            <a href="/transactions">Transactions</a>
+        </nav>
+    </header>
+
+    <main>
+        <section class="categorize-section">
+            <div class="categorize-header">
+                <h2>Uncategorized Transactions</h2>
+                <span class="counter" id="counter"></span>
+            </div>
+
+            <div class="transaction-card" id="current-transaction"></div>
+
+            <div class="categorize-controls" id="controls" style="display:none;">
+                <div class="category-input-wrapper">
+                    <input type="text" id="category-input" list="category-list" placeholder="Type or select a category..." autocomplete="off">
+                    <datalist id="category-list"></datalist>
+                </div>
+                <div class="control-buttons">
+                    <button id="save-btn" class="btn-save">Save & Next</button>
+                    <button id="skip-btn" class="btn-skip">Skip</button>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="/js/common.js"></script>
+    <script src="/js/categorize.js"></script>
+</body>
+</html>

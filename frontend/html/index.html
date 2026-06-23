@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Finance Tracker</title>
+    <link rel="stylesheet" href="/css/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+</head>
+<body>
+    <header>
+        <h1>Finance Tracker</h1>
+        <nav>
+            <a href="/" class="active">Overview</a>
+            <a href="/categorize">Categorize</a>
+            <a href="/transactions">Transactions</a>
+        </nav>
+    </header>
+
+    <main>
+        <section class="chart-section">
+            <h2>Monthly Savings — <span id="savings-year"></span></h2>
+            <canvas id="savings-chart"></canvas>
+        </section>
+
+        <section class="breakdown-section">
+            <div class="breakdown-header">
+                <h2>Monthly Breakdown</h2>
+                <div class="month-nav">
+                    <button class="month-nav-btn" id="month-prev" aria-label="Previous month">&#9664;</button>
+                    <input type="month" id="breakdown-month">
+                    <button class="month-nav-btn" id="month-next" aria-label="Next month">&#9654;</button>
+                </div>
+            </div>
+            <div class="breakdown-charts">
+                <div class="breakdown-chart-container">
+                    <h3>Income</h3>
+                    <div class="breakdown-chart-wrapper">
+                        <canvas id="income-chart"></canvas>
+                        <div class="breakdown-total" id="income-total"></div>
+                    </div>
+                </div>
+                <div class="breakdown-chart-container">
+                    <h3>Expenses</h3>
+                    <div class="breakdown-chart-wrapper">
+                        <canvas id="expense-chart"></canvas>
+                        <div class="breakdown-total" id="expense-total"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="overview-section">
+            <div class="overview-header">
+                <h2>Savings Overview</h2>
+                <div class="quarter-filter">
+                    <button class="quarter-btn active" data-quarter="1">Q1</button>
+                    <button class="quarter-btn" data-quarter="2">Q2</button>
+                    <button class="quarter-btn" data-quarter="3">Q3</button>
+                    <button class="quarter-btn" data-quarter="4">Q4</button>
+                </div>
+            </div>
+            <div class="overview-grid" id="overview-grid"></div>
+        </section>
+    </main>
+
+    <script src="/js/common.js"></script>
+    <script src="/js/app.js"></script>
+</body>
+</html>

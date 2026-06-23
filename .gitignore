@@ -1,0 +1,24 @@
+# Credentials & tokens
+credentials.json
+token.json
+
+# Database
+backend/db/finance_tracker.db
+
+# Runtime state
+backend/banks/santander_last_run.txt
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
