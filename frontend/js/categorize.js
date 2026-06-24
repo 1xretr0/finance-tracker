@@ -3,8 +3,15 @@ let currentIndex = 0;
 let categories = [];
 
 async function init() {
-    transactions = await fetchJSON("/api/uncategorized");
-    categories = await fetchJSON("/api/categories");
+    try {
+        transactions = await fetchJSON("/api/uncategorized");
+        categories = await fetchJSON("/api/categories");
+    } catch (err) {
+        document.getElementById("current-transaction").innerHTML =
+            `<div class="empty-state" style="color: var(--color-expense)">Failed to load data. Please refresh.</div>`;
+        showToast("Failed to load transactions", "error");
+        return;
+    }
 
     transactions.sort((a, b) => a.date.localeCompare(b.date));
 
@@ -73,27 +80,43 @@ async function saveCategory() {
     if (!categoryName) return;
 
     const tx = transactions[currentIndex];
+    const saveBtn = document.getElementById("save-btn");
+    setButtonLoading(saveBtn, true);
 
-    if (!categories.some((c) => c.toUpperCase() === categoryName)) {
-        await fetch("/api/categories", {
-            method: "POST",
+    try {
+        if (!categories.some((c) => c.toUpperCase() === categoryName)) {
+            const createRes = await fetch("/api/categories", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name: categoryName }),
+            });
+            if (!createRes.ok) {
+                showToast("Failed to create category", "error");
+                return;
+            }
+            categories.push(categoryName);
+            categories.sort();
+            populateCategoryList();
+        }
+
+        const res = await fetch("/api/transactions/categorize", {
+            method: "PUT",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ name: categoryName }),
+            body: JSON.stringify([{ id: tx.id, category: categoryName }]),
         });
-        categories.push(categoryName);
-        categories.sort();
-        populateCategoryList();
+
+        if (res.ok) {
+            currentIndex++;
+            updateCounter();
+            showCurrent();
+        } else {
+            showToast("Failed to save category", "error");
+        }
+    } catch (err) {
+        showToast("Failed to save category", "error");
+    } finally {
+        setButtonLoading(saveBtn, false);
     }
-
-    await fetch("/api/transactions/categorize", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify([{ id: tx.id, category: categoryName }]),
-    });
-
-    currentIndex++;
-    updateCounter();
-    showCurrent();
 }
 
 function skip() {

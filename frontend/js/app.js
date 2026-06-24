@@ -2,8 +2,6 @@ let savingsChart = null;
 let incomeChart = null;
 let expenseChart = null;
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
 const CHART_COLORS = [
     "#4ade80", "#60a5fa", "#f472b6", "#facc15", "#a78bfa",
     "#fb923c", "#34d399", "#f87171", "#38bdf8", "#c084fc",
@@ -19,7 +17,13 @@ let savingsYear = new Date().getFullYear();
 async function loadSavingsChart() {
     document.getElementById("savings-year").textContent = savingsYear;
 
-    const data = await fetchJSON(`/api/savings?year=${savingsYear}`);
+    let data;
+    try {
+        data = await fetchJSON(`/api/savings?year=${savingsYear}`);
+    } catch (err) {
+        showToast("Failed to load savings data", "error");
+        return;
+    }
 
     const savingsByMonth = {};
     data.forEach((row) => {
@@ -64,12 +68,12 @@ async function loadSavingsChart() {
             },
             scales: {
                 x: {
-                    ticks: { color: "#888" },
+                    ticks: { color: "#9a9a9a" },
                     grid: { color: "#2a2a2a" },
                 },
                 y: {
                     ticks: {
-                        color: "#888",
+                        color: "#9a9a9a",
                         callback: (v) => `$${v.toLocaleString()}`,
                     },
                     grid: { color: "#2a2a2a" },
@@ -80,7 +84,13 @@ async function loadSavingsChart() {
 }
 
 async function loadBreakdownCharts(month) {
-    const data = await fetchJSON(`/api/breakdown?month=${month}`);
+    let data;
+    try {
+        data = await fetchJSON(`/api/breakdown?month=${month}`);
+    } catch (err) {
+        showToast("Failed to load breakdown data", "error");
+        return;
+    }
 
     const incomeCtx = document.getElementById("income-chart").getContext("2d");
     if (incomeChart) incomeChart.destroy();
@@ -106,7 +116,7 @@ async function loadBreakdownCharts(month) {
             plugins: {
                 legend: {
                     position: "bottom",
-                    labels: { color: "#888", boxWidth: 12, padding: 12 },
+                    labels: { color: "#9a9a9a", boxWidth: 12, padding: 12 },
                 },
             },
         },
@@ -136,41 +146,17 @@ async function loadBreakdownCharts(month) {
             plugins: {
                 legend: {
                     position: "bottom",
-                    labels: { color: "#888", boxWidth: 12, padding: 12 },
+                    labels: { color: "#9a9a9a", boxWidth: 12, padding: 12 },
                 },
             },
         },
     });
 }
 
-function shiftMonth(monthStr, delta) {
-    const [year, month] = monthStr.split("-").map(Number);
-    const d = new Date(year, month - 1 + delta, 1);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
-
-function initBreakdownFilter() {
+function initBreakdownMonth() {
     const input = document.getElementById("breakdown-month");
-    const prevBtn = document.getElementById("month-prev");
-    const nextBtn = document.getElementById("month-next");
-    const now = new Date();
-    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-    input.value = currentMonth;
-    loadBreakdownCharts(currentMonth);
-
-    input.addEventListener("change", () => {
-        if (input.value) loadBreakdownCharts(input.value);
-    });
-
-    prevBtn.addEventListener("click", () => {
-        input.value = shiftMonth(input.value, -1);
-        loadBreakdownCharts(input.value);
-    });
-
-    nextBtn.addEventListener("click", () => {
-        input.value = shiftMonth(input.value, 1);
-        loadBreakdownCharts(input.value);
-    });
+    input.value = getCurrentMonthStr();
+    loadBreakdownCharts(input.value);
 }
 
 let savingsData = [];
@@ -179,7 +165,12 @@ async function loadSavingsOverview(quarter) {
     const year = savingsYear;
 
     if (savingsData.length === 0) {
-        savingsData = await fetchJSON(`/api/savings?year=${year}`);
+        try {
+            savingsData = await fetchJSON(`/api/savings?year=${year}`);
+        } catch (err) {
+            showToast("Failed to load overview data", "error");
+            return;
+        }
     }
 
     const monthIndices = QUARTER_MONTHS[quarter];
@@ -223,30 +214,9 @@ function initQuarterFilter() {
     buttons.forEach((btn) => {
         const q = parseInt(btn.dataset.quarter);
         btn.classList.toggle("active", q === currentQuarter);
-
-        btn.addEventListener("click", () => {
-            buttons.forEach((b) => b.classList.remove("active"));
-            btn.classList.add("active");
-            loadSavingsOverview(q);
-        });
     });
 
     loadSavingsOverview(currentQuarter);
-}
-
-function initYearNav() {
-    document.getElementById("year-prev").addEventListener("click", () => {
-        savingsYear--;
-        savingsData = [];
-        loadSavingsChart();
-        loadSavingsOverview(getActiveQuarter());
-    });
-    document.getElementById("year-next").addEventListener("click", () => {
-        savingsYear++;
-        savingsData = [];
-        loadSavingsChart();
-        loadSavingsOverview(getActiveQuarter());
-    });
 }
 
 function getActiveQuarter() {
@@ -254,8 +224,58 @@ function getActiveQuarter() {
     return active ? parseInt(active.dataset.quarter) : getCurrentQuarter();
 }
 
+function initDelegation() {
+    document.addEventListener("click", (e) => {
+        const yearPrev = e.target.closest("#year-prev");
+        if (yearPrev) {
+            savingsYear--;
+            savingsData = [];
+            loadSavingsChart();
+            loadSavingsOverview(getActiveQuarter());
+            return;
+        }
+
+        const yearNext = e.target.closest("#year-next");
+        if (yearNext) {
+            savingsYear++;
+            savingsData = [];
+            loadSavingsChart();
+            loadSavingsOverview(getActiveQuarter());
+            return;
+        }
+
+        const quarterBtn = e.target.closest(".quarter-btn");
+        if (quarterBtn) {
+            document.querySelectorAll(".quarter-btn").forEach((b) => b.classList.remove("active"));
+            quarterBtn.classList.add("active");
+            loadSavingsOverview(parseInt(quarterBtn.dataset.quarter));
+            return;
+        }
+
+        const monthPrev = e.target.closest("#month-prev");
+        if (monthPrev) {
+            const input = document.getElementById("breakdown-month");
+            input.value = shiftMonth(input.value, -1);
+            loadBreakdownCharts(input.value);
+            return;
+        }
+
+        const monthNext = e.target.closest("#month-next");
+        if (monthNext) {
+            const input = document.getElementById("breakdown-month");
+            input.value = shiftMonth(input.value, 1);
+            loadBreakdownCharts(input.value);
+            return;
+        }
+    });
+
+    document.getElementById("breakdown-month").addEventListener("change", (e) => {
+        if (e.target.value) loadBreakdownCharts(e.target.value);
+    });
+}
+
 loadSavingsChart().then(() => {
-    initYearNav();
-    initBreakdownFilter();
+    initBreakdownMonth();
     initQuarterFilter();
+    initDelegation();
 });

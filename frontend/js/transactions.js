@@ -1,23 +1,16 @@
 let categories = [];
-
-function getMonthDateRange(monthStr) {
-    const [year, month] = monthStr.split("-").map(Number);
-    const lastDay = new Date(year, month, 0).getDate();
-    return {
-        start: `${year}-${String(month).padStart(2, "0")}-01`,
-        end: `${year}-${String(month).padStart(2, "0")}-${lastDay}`,
-    };
-}
-
-function shiftMonth(monthStr, delta) {
-    const [year, month] = monthStr.split("-").map(Number);
-    const d = new Date(year, month - 1 + delta, 1);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
+let currentMonth = null;
 
 async function loadTransactions(monthStr) {
     const { start, end } = getMonthDateRange(monthStr);
-    const transactions = await fetchJSON(`/api/transactions?start_date=${start}&end_date=${end}`);
+
+    let transactions;
+    try {
+        transactions = await fetchJSON(`/api/transactions?start_date=${start}&end_date=${end}`);
+    } catch (err) {
+        showToast("Failed to load transactions", "error");
+        return;
+    }
 
     const income = transactions.filter((tx) => tx.type === TX_TYPE_TRANSFER);
     const expenses = transactions.filter((tx) => tx.type === TX_TYPE_PURCHASE || tx.type === TX_TYPE_OUTGOING_TRANSFER);
@@ -112,7 +105,6 @@ function selectRow(row) {
     const amountClass = type === "income" ? "amount-income" : "amount-expense";
 
     const cells = row.querySelectorAll("td");
-    // cells: [selector, date, amount, description, category, actions]
 
     cells[2].innerHTML = `<input type="number" class="inline-edit-input ${amountClass}" step="0.01" value="${amount}">`;
     cells[3].innerHTML = `<input type="text" class="inline-edit-input" value="${description}">`;
@@ -149,6 +141,13 @@ function deselectRow(row) {
 }
 
 async function saveRow(row) {
+    const monthInput = document.getElementById("transactions-month");
+    if (monthInput.value !== currentMonth) {
+        showToast("Month changed — edit cancelled", "error");
+        deselectRow(row);
+        return;
+    }
+
     const id = row.dataset.id;
     const cells = row.querySelectorAll("td");
     const newAmount = parseFloat(cells[2].querySelector("input").value);
@@ -167,27 +166,41 @@ async function saveRow(row) {
         return;
     }
 
-    const res = await fetch(`/api/transactions/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-    });
+    try {
+        const res = await fetch(`/api/transactions/${id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+        });
 
-    if (res.ok) {
-        row.dataset.amount = newAmount;
-        row.dataset.description = newDescription;
-        row.dataset.category = newCategory.toUpperCase();
-        deselectRow(row);
+        if (res.ok) {
+            row.dataset.amount = newAmount;
+            row.dataset.description = newDescription;
+            row.dataset.category = newCategory.toUpperCase();
+            deselectRow(row);
+            showToast("Saved", "success");
+        } else {
+            showToast("Save failed", "error");
+        }
+    } catch (err) {
+        showToast("Save failed", "error");
     }
 }
 
 async function deleteRow(row) {
     const id = row.dataset.id;
-    const res = await fetch(`/api/transactions/${id}`, {
-        method: "DELETE",
-    });
-    if (res.ok) {
-        row.remove();
+    try {
+        const res = await fetch(`/api/transactions/${id}`, {
+            method: "DELETE",
+        });
+        if (res.ok) {
+            row.remove();
+            showToast("Deleted", "success");
+        } else {
+            showToast("Delete failed", "error");
+        }
+    } catch (err) {
+        showToast("Delete failed", "error");
     }
 }
 
@@ -259,22 +272,26 @@ function initMonthFilter() {
     const prevBtn = document.getElementById("month-prev");
     const nextBtn = document.getElementById("month-next");
 
-    const now = new Date();
-    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    currentMonth = getCurrentMonthStr();
     input.value = currentMonth;
     loadTransactions(currentMonth);
 
     input.addEventListener("change", () => {
-        if (input.value) loadTransactions(input.value);
+        if (input.value) {
+            currentMonth = input.value;
+            loadTransactions(input.value);
+        }
     });
 
     prevBtn.addEventListener("click", () => {
         input.value = shiftMonth(input.value, -1);
+        currentMonth = input.value;
         loadTransactions(input.value);
     });
 
     nextBtn.addEventListener("click", () => {
         input.value = shiftMonth(input.value, 1);
+        currentMonth = input.value;
         loadTransactions(input.value);
     });
 }
@@ -335,16 +352,39 @@ async function submitNewTx(e) {
     if (person) payload.person = person;
     if (reference) payload.reference = reference;
 
-    const res = await fetch("/api/transactions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-    });
+    const submitBtn = document.querySelector(".btn-modal-submit");
+    setButtonLoading(submitBtn, true);
 
-    if (res.ok) {
-        closeNewTxModal();
-        const monthInput = document.getElementById("transactions-month");
-        loadTransactions(monthInput.value);
+    try {
+        if (payload.category && !categories.some((c) => c.toUpperCase() === payload.category)) {
+            await fetch("/api/categories", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name: payload.category }),
+            });
+            categories.push(payload.category);
+        }
+
+        const res = await fetch("/api/transactions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+        });
+
+        if (res.ok) {
+            closeNewTxModal();
+            showToast("Transaction created", "success");
+            const monthInput = document.getElementById("transactions-month");
+            loadTransactions(monthInput.value);
+        } else if (res.status === 409) {
+            showToast("Duplicate transaction", "error");
+        } else {
+            showToast("Failed to create transaction", "error");
+        }
+    } catch (err) {
+        showToast("Failed to create transaction", "error");
+    } finally {
+        setButtonLoading(submitBtn, false);
     }
 }
 

@@ -2,12 +2,12 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 24px;
+    margin-bottom: var(--space-lg);
 }
 
 .transactions-header h2 {
     font-size: 1rem;
-    color: #aaa;
+    color: var(--text-secondary);
 }
 
 .tables-grid {
@@ -17,18 +17,18 @@
 }
 
 .table-section {
-    background: #1e1e1e;
+    background: var(--bg-card);
     padding: 20px;
-    border-radius: 12px;
+    border-radius: var(--radius-lg);
     overflow-x: auto;
 }
 
 .table-section h3 {
     font-size: 0.9rem;
-    color: #888;
+    color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    margin-bottom: 16px;
+    margin-bottom: var(--space-md);
 }
 
 table {
@@ -39,27 +39,27 @@ table {
 th, td {
     text-align: left;
     padding: 10px 12px;
-    border-bottom: 1px solid #2a2a2a;
+    border-bottom: 1px solid var(--border-subtle);
     font-size: 0.85rem;
 }
 
 th {
-    color: #666;
+    color: var(--text-faint);
     text-transform: uppercase;
     letter-spacing: 0.5px;
     font-size: 0.75rem;
 }
 
 td {
-    color: #e0e0e0;
+    color: var(--text-primary);
 }
 
-.amount-income { color: #4ade80; }
-.amount-expense { color: #f87171; }
+.amount-income { color: var(--color-income); }
+.amount-expense { color: var(--color-expense); }
 
 .category-tag {
-    background: #2a2a2a;
-    color: #aaa;
+    background: var(--bg-input);
+    color: var(--text-secondary);
     padding: 2px 8px;
     border-radius: 4px;
     font-size: 0.8rem;
@@ -67,15 +67,15 @@ td {
 
 .no-data {
     text-align: center;
-    color: #555;
-    padding: 24px;
+    color: var(--text-faint);
+    padding: var(--space-lg);
 }
 
 .table-section-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 16px;
+    margin-bottom: var(--space-md);
 }
 
 .table-section-header h3 {
@@ -84,24 +84,24 @@ td {
 
 .btn-edit-table {
     padding: 5px 14px;
-    background: #2a2a2a;
-    color: #888;
-    border: 1px solid #333;
-    border-radius: 6px;
+    background: var(--bg-input);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
     cursor: pointer;
     font-size: 0.8rem;
-    transition: background 0.15s, color 0.15s;
+    transition: background var(--transition-fast), color var(--transition-fast);
 }
 
 .btn-edit-table:hover {
-    background: #333;
-    color: #e0e0e0;
+    background: var(--border);
+    color: var(--text-primary);
 }
 
 .btn-edit-table.active {
-    background: #f87171;
-    color: #fff;
-    border-color: #f87171;
+    background: var(--color-expense);
+    color: var(--text-heading);
+    border-color: var(--color-expense);
 }
 
 .col-selector,
@@ -153,19 +153,19 @@ td {
     display: inline-block;
     width: 16px;
     height: 16px;
-    border: 2px solid #555;
+    border: 2px solid var(--text-faint);
     border-radius: 50%;
     cursor: pointer;
-    transition: border-color 0.15s, background 0.15s;
+    transition: border-color var(--transition-fast), background var(--transition-fast);
 }
 
 .row-selector:hover {
-    border-color: #4ade80;
+    border-color: var(--color-income);
 }
 
 tr.row-selected .row-selector {
-    border-color: #4ade80;
-    background: #4ade80;
+    border-color: var(--color-income);
+    background: var(--color-income);
 }
 
 tr.row-selected {
@@ -176,24 +176,24 @@ tr.row-selected {
     width: 100%;
     padding: 4px 8px;
     background: #1a1a1a;
-    color: #e0e0e0;
+    color: var(--text-primary);
     border: 1px solid #444;
     border-radius: 4px;
     font-size: 0.85rem;
     outline: none;
-    transition: border-color 0.15s;
+    transition: border-color var(--transition-fast);
 }
 
 .inline-edit-input:focus {
-    border-color: #4ade80;
+    border-color: var(--color-income);
 }
 
 .inline-edit-input.amount-income {
-    color: #4ade80;
+    color: var(--color-income);
 }
 
 .inline-edit-input.amount-expense {
-    color: #f87171;
+    color: var(--color-expense);
 }
 
 .btn-save-row,
@@ -204,11 +204,11 @@ tr.row-selected {
     font-size: 1rem;
     padding: 2px 6px;
     border-radius: 4px;
-    transition: background 0.15s;
+    transition: background var(--transition-fast);
 }
 
 .btn-save-row {
-    color: #4ade80;
+    color: var(--color-income);
 }
 
 .btn-save-row:hover {
@@ -216,34 +216,34 @@ tr.row-selected {
 }
 
 .btn-delete-row {
-    color: #888;
+    color: var(--text-muted);
 }
 
 .btn-delete-row:hover {
-    color: #f87171;
+    color: var(--color-expense);
     background: rgba(248, 113, 113, 0.1);
 }
 
 .table-section-actions {
     display: flex;
-    gap: 8px;
+    gap: var(--space-sm);
 }
 
 .btn-new-tx {
     padding: 5px 14px;
-    background: #2a2a2a;
-    color: #4ade80;
-    border: 1px solid #333;
-    border-radius: 6px;
+    background: var(--bg-input);
+    color: var(--color-income);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
     cursor: pointer;
     font-size: 0.8rem;
     font-weight: 600;
-    transition: background 0.15s, border-color 0.15s;
+    transition: background var(--transition-fast), border-color var(--transition-fast);
 }
 
 .btn-new-tx:hover {
-    background: #333;
-    border-color: #4ade80;
+    background: var(--border);
+    border-color: var(--color-income);
 }
 
 .modal-overlay {
@@ -261,10 +261,10 @@ tr.row-selected {
 }
 
 .modal {
-    background: #1e1e1e;
-    border: 1px solid #333;
-    border-radius: 12px;
-    padding: 24px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-lg);
     width: 100%;
     max-width: 420px;
 }
@@ -278,20 +278,20 @@ tr.row-selected {
 
 .modal-header h3 {
     font-size: 1rem;
-    color: #e0e0e0;
+    color: var(--text-primary);
 }
 
 .modal-close {
     background: none;
     border: none;
-    color: #888;
+    color: var(--text-muted);
     font-size: 1.4rem;
     cursor: pointer;
     padding: 0 4px;
 }
 
 .modal-close:hover {
-    color: #e0e0e0;
+    color: var(--text-primary);
 }
 
 .form-row {
@@ -301,7 +301,7 @@ tr.row-selected {
 .form-row label {
     display: block;
     font-size: 0.8rem;
-    color: #888;
+    color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.5px;
     margin-bottom: 6px;
@@ -310,17 +310,17 @@ tr.row-selected {
 .form-row input {
     width: 100%;
     padding: 8px 12px;
-    background: #2a2a2a;
-    color: #e0e0e0;
-    border: 1px solid #333;
-    border-radius: 6px;
+    background: var(--bg-input);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
     font-size: 0.85rem;
     outline: none;
-    transition: border-color 0.15s;
+    transition: border-color var(--transition-fast);
 }
 
 .form-row input:focus {
-    border-color: #4ade80;
+    border-color: var(--color-income);
 }
 
 .form-actions {
@@ -332,25 +332,25 @@ tr.row-selected {
 
 .btn-modal-cancel {
     padding: 8px 16px;
-    background: #2a2a2a;
-    color: #888;
-    border: 1px solid #333;
-    border-radius: 6px;
+    background: var(--bg-input);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
     cursor: pointer;
     font-size: 0.85rem;
 }
 
 .btn-modal-cancel:hover {
-    background: #333;
-    color: #e0e0e0;
+    background: var(--border);
+    color: var(--text-primary);
 }
 
 .btn-modal-submit {
     padding: 8px 16px;
-    background: #4ade80;
-    color: #121212;
+    background: var(--color-income);
+    color: var(--bg-body);
     border: none;
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     cursor: pointer;
     font-size: 0.85rem;
     font-weight: 600;

@@ -1,66 +1,66 @@
 .categorize-section {
-    background: #1e1e1e;
-    padding: 24px;
-    border-radius: 12px;
+    background: var(--bg-card);
+    padding: var(--space-lg);
+    border-radius: var(--radius-lg);
 }
 
 .categorize-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 24px;
+    margin-bottom: var(--space-lg);
 }
 
 .categorize-header h2 {
     font-size: 1rem;
-    color: #aaa;
+    color: var(--text-secondary);
 }
 
 .counter {
     font-size: 0.85rem;
-    color: #666;
-    background: #252525;
-    padding: 4px 12px;
-    border-radius: 12px;
+    color: var(--text-faint);
+    background: var(--bg-elevated);
+    padding: var(--space-xs) 12px;
+    border-radius: var(--radius-lg);
 }
 
 .transaction-card {
-    background: #252525;
-    border-radius: 10px;
-    padding: 24px;
+    background: var(--bg-elevated);
+    border-radius: var(--radius-md);
+    padding: var(--space-lg);
     margin-bottom: 20px;
 }
 
 .tx-row {
     display: flex;
     justify-content: space-between;
-    padding: 8px 0;
+    padding: var(--space-sm) 0;
 }
 
 .tx-row .label {
-    color: #888;
+    color: var(--text-muted);
     font-size: 0.85rem;
 }
 
 .tx-row .value {
-    color: #e0e0e0;
+    color: var(--text-primary);
     font-size: 0.9rem;
     font-weight: 500;
 }
 
-.tx-row .value.amount-purchase { color: #f87171; }
-.tx-row .value.amount-transfer { color: #4ade80; }
-.tx-row .value.amount-outgoing_transfer { color: #f87171; }
+.tx-row .value.amount-purchase { color: var(--color-expense); }
+.tx-row .value.amount-transfer { color: var(--color-income); }
+.tx-row .value.amount-outgoing_transfer { color: var(--color-expense); }
 
 .tx-divider {
     border: none;
-    border-top: 1px solid #333;
+    border-top: 1px solid var(--border);
     margin: 12px 0;
 }
 
 .empty-state {
     text-align: center;
-    color: #4ade80;
+    color: var(--color-income);
     font-size: 1.1rem;
     padding: 40px;
 }
@@ -78,30 +78,30 @@
 .category-input-wrapper input {
     width: 100%;
     padding: 12px 16px;
-    background: #2a2a2a;
-    color: #e0e0e0;
-    border: 1px solid #333;
-    border-radius: 8px;
+    background: var(--bg-input);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
     font-size: 0.95rem;
     text-transform: uppercase;
 }
 
 .category-input-wrapper input:focus {
     outline: none;
-    border-color: #4ade80;
+    border-color: var(--color-income);
 }
 
 .control-buttons {
     display: flex;
-    gap: 8px;
+    gap: var(--space-sm);
 }
 
 .btn-save {
     padding: 12px 20px;
-    background: #4ade80;
-    color: #121212;
+    background: var(--color-income);
+    color: var(--bg-body);
     border: none;
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     font-weight: 600;
     cursor: pointer;
     font-size: 0.9rem;
@@ -112,22 +112,22 @@
 }
 
 .btn-save:disabled {
-    background: #333;
-    color: #666;
+    background: var(--border);
+    color: var(--text-faint);
     cursor: not-allowed;
 }
 
 .btn-skip {
     padding: 12px 20px;
-    background: #2a2a2a;
-    color: #888;
-    border: 1px solid #333;
-    border-radius: 8px;
+    background: var(--bg-input);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
     cursor: pointer;
     font-size: 0.9rem;
 }
 
 .btn-skip:hover {
-    background: #333;
+    background: var(--border);
     color: #ccc;
 }
