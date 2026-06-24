@@ -194,3 +194,199 @@ class TestStaticFiles:
         res = client.get("/js/app.js")
         assert res.status_code == 200
         assert b"fetchJSON" in res.data
+
+
+class TestBreakdownEndpoint:
+    def test_returns_income_and_expenses_keys(self, client):
+        seed_data()
+        res = client.get("/api/breakdown?month=2026-03")
+        assert res.status_code == 200
+        data = res.get_json()
+        assert "income" in data
+        assert "expenses" in data
+
+    def test_income_contains_transfers(self, client):
+        seed_data()
+        res = client.get("/api/breakdown?month=2026-03")
+        data = res.get_json()
+        assert any(r["total"] == 50000.0 for r in data["income"])
+
+    def test_expenses_contains_purchases_and_outgoing(self, client):
+        seed_data()
+        res = client.get("/api/breakdown?month=2026-03")
+        data = res.get_json()
+        expense_totals = [r["total"] for r in data["expenses"]]
+        assert sum(expense_totals) == pytest.approx(350.0 + 5000.0)
+
+    def test_defaults_to_current_month_when_no_param(self, client):
+        res = client.get("/api/breakdown")
+        assert res.status_code == 200
+        data = res.get_json()
+        assert "income" in data and "expenses" in data
+
+    def test_empty_month_returns_empty_lists(self, client):
+        seed_data()
+        res = client.get("/api/breakdown?month=2020-01")
+        data = res.get_json()
+        assert data["income"] == []
+        assert data["expenses"] == []
+
+
+class TestUncategorizedEndpoint:
+    def test_returns_uncategorized_transactions(self, client):
+        seed_data()
+        res = client.get("/api/uncategorized")
+        assert res.status_code == 200
+        data = res.get_json()
+        assert len(data) == 6
+        assert all(tx["category"] is None for tx in data)
+
+    def test_excludes_categorized_transactions(self, client):
+        seed_data()
+        tx_id = client.get("/api/transactions").get_json()[0]["id"]
+        client.put("/api/transactions/categorize", json=[{"id": tx_id, "category": "food"}])
+        data = client.get("/api/uncategorized").get_json()
+        assert all(tx["id"] != tx_id for tx in data)
+
+    def test_empty_db(self, client):
+        res = client.get("/api/uncategorized")
+        assert res.get_json() == []
+
+
+class TestCategorizeEndpoint:
+    def test_updates_categories(self, client):
+        seed_data()
+        tx_id = client.get("/api/transactions").get_json()[0]["id"]
+        res = client.put("/api/transactions/categorize", json=[{"id": tx_id, "category": "food"}])
+        assert res.status_code == 200
+        assert res.get_json()["updated"] == 1
+
+    def test_uppercases_category(self, client):
+        seed_data()
+        tx_id = client.get("/api/transactions").get_json()[0]["id"]
+        client.put("/api/transactions/categorize", json=[{"id": tx_id, "category": "groceries"}])
+        tx = next(t for t in client.get("/api/transactions").get_json() if t["id"] == tx_id)
+        assert tx["category"] == "GROCERIES"
+
+    def test_rejects_non_list_body(self, client):
+        res = client.put("/api/transactions/categorize", json={"id": 1, "category": "food"})
+        assert res.status_code == 400
+
+    def test_rejects_missing_body(self, client):
+        res = client.put("/api/transactions/categorize", data="not json", content_type="text/plain")
+        assert res.status_code in (400, 415)
+
+
+class TestCreateTransactionEndpoint:
+    def test_creates_valid_transaction(self, client):
+        res = client.post("/api/transactions", json={
+            "type": "purchase", "amount": 150.0, "date": "2026-06-01T10:00:00",
+            "merchant": "OXXO", "currency": "MXN",
+        })
+        assert res.status_code == 201
+        assert res.get_json()["success"] is True
+
+    def test_defaults_bank_to_manual(self, client):
+        client.post("/api/transactions", json={
+            "type": "purchase", "amount": 50.0, "date": "2026-06-01T10:00:00",
+        })
+        tx = client.get("/api/transactions").get_json()[0]
+        assert tx["bank"] == "manual"
+
+    def test_rejects_missing_required_field(self, client):
+        res = client.post("/api/transactions", json={"type": "purchase", "amount": 50.0})
+        assert res.status_code == 400
+
+    def test_rejects_negative_amount(self, client):
+        res = client.post("/api/transactions", json={
+            "type": "purchase", "amount": -10.0, "date": "2026-06-01T10:00:00",
+        })
+        assert res.status_code == 400
+
+    def test_rejects_invalid_type(self, client):
+        res = client.post("/api/transactions", json={
+            "type": "refund", "amount": 100.0, "date": "2026-06-01T10:00:00",
+        })
+        assert res.status_code == 400
+
+    def test_returns_409_for_duplicate(self, client):
+        tx = {"type": "purchase", "amount": 100.0, "date": "2026-06-01T10:00:00", "merchant": "OXXO"}
+        client.post("/api/transactions", json=tx)
+        res = client.post("/api/transactions", json=tx)
+        assert res.status_code == 409
+
+    def test_rejects_non_dict_body(self, client):
+        res = client.post("/api/transactions", json=[{"type": "purchase"}])
+        assert res.status_code == 400
+
+
+class TestUpdateTransactionEndpoint:
+    def test_updates_amount(self, client):
+        seed_data()
+        tx_id = client.get("/api/transactions").get_json()[0]["id"]
+        res = client.put(f"/api/transactions/{tx_id}", json={"amount": 999.0})
+        assert res.status_code == 200
+        assert res.get_json()["success"] is True
+
+    def test_returns_404_for_missing_id(self, client):
+        res = client.put("/api/transactions/9999", json={"amount": 10.0})
+        assert res.status_code == 404
+
+    def test_rejects_negative_amount(self, client):
+        seed_data()
+        tx_id = client.get("/api/transactions").get_json()[0]["id"]
+        res = client.put(f"/api/transactions/{tx_id}", json={"amount": -5.0})
+        assert res.status_code == 400
+
+    def test_rejects_non_dict_body(self, client):
+        res = client.put("/api/transactions/1", json=[{"amount": 10.0}])
+        assert res.status_code == 400
+
+
+class TestDeleteTransactionEndpoint:
+    def test_deletes_existing_transaction(self, client):
+        seed_data()
+        tx_id = client.get("/api/transactions").get_json()[0]["id"]
+        res = client.delete(f"/api/transactions/{tx_id}")
+        assert res.status_code == 200
+        assert res.get_json()["success"] is True
+
+    def test_transaction_gone_after_delete(self, client):
+        seed_data()
+        tx_id = client.get("/api/transactions").get_json()[0]["id"]
+        client.delete(f"/api/transactions/{tx_id}")
+        ids = [tx["id"] for tx in client.get("/api/transactions").get_json()]
+        assert tx_id not in ids
+
+    def test_returns_404_for_missing_id(self, client):
+        res = client.delete("/api/transactions/9999")
+        assert res.status_code == 404
+
+
+class TestCategoriesEndpoint:
+    def test_returns_empty_list_initially(self, client):
+        res = client.get("/api/categories")
+        assert res.status_code == 200
+        assert res.get_json() == []
+
+    def test_returns_created_categories(self, client):
+        client.post("/api/categories", json={"name": "food"})
+        client.post("/api/categories", json={"name": "transport"})
+        cats = client.get("/api/categories").get_json()
+        assert "FOOD" in cats
+        assert "TRANSPORT" in cats
+
+    def test_create_category_returns_201(self, client):
+        res = client.post("/api/categories", json={"name": "health"})
+        assert res.status_code == 201
+        assert res.get_json()["name"] == "HEALTH"
+
+    def test_create_category_rejects_missing_name(self, client):
+        res = client.post("/api/categories", json={})
+        assert res.status_code == 400
+
+    def test_create_duplicate_category_still_returns_201(self, client):
+        client.post("/api/categories", json={"name": "food"})
+        res = client.post("/api/categories", json={"name": "food"})
+        assert res.status_code == 201
+        assert client.get("/api/categories").get_json().count("FOOD") == 1

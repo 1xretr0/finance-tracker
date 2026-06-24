@@ -19,7 +19,14 @@
 
     <main>
         <section class="chart-section">
-            <h2>Monthly Savings — <span id="savings-year"></span></h2>
+            <div class="chart-header">
+                <h2>Monthly Savings</h2>
+                <div class="year-nav">
+                    <button class="month-nav-btn" id="year-prev" aria-label="Previous year">&#9664;</button>
+                    <span class="year-label" id="savings-year"></span>
+                    <button class="month-nav-btn" id="year-next" aria-label="Next year">&#9654;</button>
+                </div>
+            </div>
             <canvas id="savings-chart"></canvas>
         </section>
 

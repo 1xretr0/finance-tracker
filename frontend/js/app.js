@@ -14,11 +14,12 @@ const EXPENSE_COLORS = [
     "#e11d48", "#fb7185", "#dc2626", "#f43f5e", "#b91c1c",
 ];
 
-async function loadSavingsChart() {
-    const year = new Date().getFullYear();
-    document.getElementById("savings-year").textContent = year;
+let savingsYear = new Date().getFullYear();
 
-    const data = await fetchJSON(`/api/savings?year=${year}`);
+async function loadSavingsChart() {
+    document.getElementById("savings-year").textContent = savingsYear;
+
+    const data = await fetchJSON(`/api/savings?year=${savingsYear}`);
 
     const savingsByMonth = {};
     data.forEach((row) => {
@@ -26,7 +27,7 @@ async function loadSavingsChart() {
     });
 
     const values = MONTHS.map((_, i) => {
-        const key = `${year}-${String(i + 1).padStart(2, "0")}`;
+        const key = `${savingsYear}-${String(i + 1).padStart(2, "0")}`;
         return savingsByMonth[key] ?? null;
     });
 
@@ -175,7 +176,7 @@ function initBreakdownFilter() {
 let savingsData = [];
 
 async function loadSavingsOverview(quarter) {
-    const year = new Date().getFullYear();
+    const year = savingsYear;
 
     if (savingsData.length === 0) {
         savingsData = await fetchJSON(`/api/savings?year=${year}`);
@@ -233,7 +234,28 @@ function initQuarterFilter() {
     loadSavingsOverview(currentQuarter);
 }
 
+function initYearNav() {
+    document.getElementById("year-prev").addEventListener("click", () => {
+        savingsYear--;
+        savingsData = [];
+        loadSavingsChart();
+        loadSavingsOverview(getActiveQuarter());
+    });
+    document.getElementById("year-next").addEventListener("click", () => {
+        savingsYear++;
+        savingsData = [];
+        loadSavingsChart();
+        loadSavingsOverview(getActiveQuarter());
+    });
+}
+
+function getActiveQuarter() {
+    const active = document.querySelector(".quarter-btn.active");
+    return active ? parseInt(active.dataset.quarter) : getCurrentQuarter();
+}
+
 loadSavingsChart().then(() => {
+    initYearNav();
     initBreakdownFilter();
     initQuarterFilter();
 });

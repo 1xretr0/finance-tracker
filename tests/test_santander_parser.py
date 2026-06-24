@@ -220,3 +220,53 @@ class TestOutgoingTransferParser:
     def test_ignores_transfer_to_mercado_pago_w(self):
         tx = parse_transaction(IGNORED_OUTGOING_TRANSFER_EMAIL)
         assert tx is None
+
+    def test_ignores_transfer_to_stp(self):
+        email = """\
+Notificaci=F3n Transferencia Interbancaria a trav=E9s de SuperM=F3vil.
+
+Apreciable JUAN PEREZ GARCIA
+
+Le informamos que recibimos su solicitud para realizar una transferencia, d=
+e su cuenta terminaci=F3n 1234, a la cuenta terminaci=F3n 8275 en STP por u=
+n importe de $ 1500.00 el 10/Jun/2026 a las 11:00, con la referencia 9999999.
+"""
+        tx = parse_transaction(email)
+        assert tx is None
+
+    def test_amount_with_thousands(self):
+        email = OUTGOING_TRANSFER_EMAIL.replace("$ 505.00", "$ 12,500.00")
+        tx = parse_transaction(email)
+        assert tx["amount"] == 12500.00
+
+
+IGNORED_INCOMING_TRANSFER_EMAIL = """\
+ABONO v=EDa SPEI
+
+estimado cliente, recibiste v=EDa SPEI un abono por $1,000.00 MXN a tu cue=
+nta terminaci=F3n 1234
+
+Datos de la operaci=F3n
+
+Fecha: 15/06/2026
+Hora: 10:00 hrs
+Banco emisor: Mercado Pago W
+Cuenta origen:6184
+Clave de rastreo: MP123456
+Concepto de pago:REEMBOLSO
+"""
+
+
+class TestIncomingTransferIgnoreList:
+    def test_ignores_transfer_from_mercado_pago_w(self):
+        tx = parse_transaction(IGNORED_INCOMING_TRANSFER_EMAIL)
+        assert tx is None
+
+    def test_does_not_ignore_unknown_sender(self):
+        email = IGNORED_INCOMING_TRANSFER_EMAIL.replace(
+            "Banco emisor: Mercado Pago W\nCuenta origen:6184",
+            "Banco emisor: BANAMEX\nCuenta origen:9999",
+        )
+        tx = parse_transaction(email)
+        assert tx is not None
+        assert tx["type"] == "transfer"

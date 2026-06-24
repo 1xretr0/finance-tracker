@@ -20,39 +20,54 @@
     <main>
         <div class="transactions-header">
             <h2>Transaction Details</h2>
-            <div class="quarter-filter">
-                <button class="quarter-btn" data-quarter="1">Q1</button>
-                <button class="quarter-btn" data-quarter="2">Q2</button>
-                <button class="quarter-btn" data-quarter="3">Q3</button>
-                <button class="quarter-btn" data-quarter="4">Q4</button>
+            <div class="month-nav">
+                <button class="month-nav-btn" id="month-prev" aria-label="Previous month">&#9664;</button>
+                <input type="month" id="transactions-month">
+                <button class="month-nav-btn" id="month-next" aria-label="Next month">&#9654;</button>
             </div>
         </div>
 
         <div class="tables-grid">
-            <section class="table-section">
-                <h3>Income</h3>
+            <section class="table-section" id="income-section">
+                <div class="table-section-header">
+                    <h3>Income</h3>
+                    <div class="table-section-actions">
+                        <button class="btn-new-tx" data-type="income">+ New</button>
+                        <button class="btn-edit-table" data-table="income">Edit</button>
+                    </div>
+                </div>
                 <table id="income-table">
                     <thead>
                         <tr>
+                            <th class="col-selector"></th>
                             <th>Date</th>
                             <th>Amount</th>
                             <th>Source</th>
                             <th>Category</th>
+                            <th class="col-actions"></th>
                         </tr>
                     </thead>
                     <tbody></tbody>
                 </table>
             </section>
 
-            <section class="table-section">
-                <h3>Expenses</h3>
+            <section class="table-section" id="expense-section">
+                <div class="table-section-header">
+                    <h3>Expenses</h3>
+                    <div class="table-section-actions">
+                        <button class="btn-new-tx" data-type="expense">+ New</button>
+                        <button class="btn-edit-table" data-table="expense">Edit</button>
+                    </div>
+                </div>
                 <table id="expense-table">
                     <thead>
                         <tr>
+                            <th class="col-selector"></th>
                             <th>Date</th>
                             <th>Amount</th>
                             <th>Description</th>
                             <th>Category</th>
+                            <th class="col-actions"></th>
                         </tr>
                     </thead>
                     <tbody></tbody>
@@ -60,6 +75,46 @@
             </section>
         </div>
     </main>
+
+    <div class="modal-overlay" id="new-tx-modal" hidden>
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="modal-title">New Transaction</h3>
+                <button class="modal-close" id="modal-close">&times;</button>
+            </div>
+            <form id="new-tx-form">
+                <input type="hidden" id="tx-form-type">
+                <div class="form-row">
+                    <label for="tx-form-amount">Amount</label>
+                    <input type="number" id="tx-form-amount" step="0.01" min="0" required>
+                </div>
+                <div class="form-row">
+                    <label for="tx-form-date">Date</label>
+                    <input type="datetime-local" id="tx-form-date" required>
+                </div>
+                <div class="form-row">
+                    <label for="tx-form-description" id="tx-form-description-label">Description</label>
+                    <input type="text" id="tx-form-description" required>
+                </div>
+                <div class="form-row">
+                    <label for="tx-form-category">Category</label>
+                    <input type="text" id="tx-form-category" list="category-list">
+                </div>
+                <div class="form-row">
+                    <label for="tx-form-person">Person</label>
+                    <input type="text" id="tx-form-person">
+                </div>
+                <div class="form-row">
+                    <label for="tx-form-reference">Reference</label>
+                    <input type="text" id="tx-form-reference">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-modal-cancel" id="modal-cancel">Cancel</button>
+                    <button type="submit" class="btn-modal-submit">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
     <script src="/js/common.js"></script>
     <script src="/js/transactions.js"></script>

@@ -1,5 +1,9 @@
 import pytest
-from backend.db.storage import init_db, insert_transactions, get_transactions, get_summary, get_connection
+from backend.db.storage import (
+    init_db, insert_transactions, get_transactions, get_summary, get_connection,
+    get_uncategorized, update_categories, get_categories, create_category,
+    update_transaction, delete_transaction,
+)
 import backend.db.storage as storage
 
 
@@ -256,3 +260,155 @@ class TestRawSQL:
         assert row["source_account"] == "2893"
         assert row["tracking_key"] == "HSBC628982"
         assert row["concept"] == "NOMINA"
+
+
+class TestGetUncategorized:
+    def test_returns_only_uncategorized(self):
+        insert_transactions([make_purchase(merchant="OXXO"), make_purchase(amount=200, merchant="VIPS")])
+        rows = get_uncategorized()
+        assert len(rows) == 2
+
+    def test_excludes_categorized(self):
+        insert_transactions([make_purchase()])
+        update_categories([{"id": get_transactions()[0]["id"], "category": "food"}])
+        rows = get_uncategorized()
+        assert len(rows) == 0
+
+    def test_empty_db_returns_empty_list(self):
+        assert get_uncategorized() == []
+
+    def test_ordered_by_date_desc(self):
+        insert_transactions([
+            make_purchase(date="2026-06-01T10:00:00", amount=100),
+            make_purchase(date="2026-06-15T10:00:00", amount=200),
+        ])
+        rows = get_uncategorized()
+        assert rows[0]["date"] > rows[1]["date"]
+
+
+class TestUpdateCategories:
+    def test_updates_category_for_single_transaction(self):
+        insert_transactions([make_purchase()])
+        tx_id = get_transactions()[0]["id"]
+        count = update_categories([{"id": tx_id, "category": "food"}])
+        assert count == 1
+        assert get_transactions()[0]["category"] == "FOOD"
+
+    def test_uppercases_category(self):
+        insert_transactions([make_purchase()])
+        tx_id = get_transactions()[0]["id"]
+        update_categories([{"id": tx_id, "category": "groceries"}])
+        assert get_transactions()[0]["category"] == "GROCERIES"
+
+    def test_sets_category_to_none(self):
+        insert_transactions([make_purchase()])
+        tx_id = get_transactions()[0]["id"]
+        update_categories([{"id": tx_id, "category": "food"}])
+        update_categories([{"id": tx_id, "category": None}])
+        assert get_transactions()[0]["category"] is None
+
+    def test_updates_multiple_transactions(self):
+        insert_transactions([make_purchase(amount=100), make_purchase(amount=200)])
+        ids = [tx["id"] for tx in get_transactions()]
+        count = update_categories([{"id": ids[0], "category": "food"}, {"id": ids[1], "category": "transport"}])
+        assert count == 2
+
+    def test_returns_zero_for_nonexistent_id(self):
+        count = update_categories([{"id": 9999, "category": "food"}])
+        assert count == 0
+
+
+class TestGetCategories:
+    def test_returns_empty_list_when_none_exist(self):
+        assert get_categories() == []
+
+    def test_returns_all_categories_sorted(self):
+        create_category("transport")
+        create_category("food")
+        create_category("utilities")
+        cats = get_categories()
+        assert cats == ["FOOD", "TRANSPORT", "UTILITIES"]
+
+    def test_returns_list_of_strings(self):
+        create_category("health")
+        cats = get_categories()
+        assert all(isinstance(c, str) for c in cats)
+
+
+class TestCreateCategory:
+    def test_creates_and_uppercases_category(self):
+        name = create_category("groceries")
+        assert name == "GROCERIES"
+        assert "GROCERIES" in get_categories()
+
+    def test_ignores_duplicate(self):
+        create_category("food")
+        create_category("food")
+        assert get_categories().count("FOOD") == 1
+
+    def test_already_uppercased_input(self):
+        name = create_category("TRANSPORT")
+        assert name == "TRANSPORT"
+        assert "TRANSPORT" in get_categories()
+
+
+class TestUpdateTransaction:
+    def test_updates_amount(self):
+        insert_transactions([make_purchase(amount=100)])
+        tx_id = get_transactions()[0]["id"]
+        result = update_transaction(tx_id, {"amount": 250.0})
+        assert result is True
+        assert get_transactions()[0]["amount"] == 250.0
+
+    def test_updates_merchant(self):
+        insert_transactions([make_purchase(merchant="OXXO")])
+        tx_id = get_transactions()[0]["id"]
+        update_transaction(tx_id, {"merchant": "WALMART"})
+        assert get_transactions()[0]["merchant"] == "WALMART"
+
+    def test_updates_category_and_uppercases(self):
+        insert_transactions([make_purchase()])
+        tx_id = get_transactions()[0]["id"]
+        update_transaction(tx_id, {"category": "food"})
+        assert get_transactions()[0]["category"] == "FOOD"
+
+    def test_ignores_non_updatable_fields(self):
+        insert_transactions([make_purchase()])
+        tx_id = get_transactions()[0]["id"]
+        result = update_transaction(tx_id, {"bank": "bbva", "type": "transfer"})
+        assert result is False
+        row = get_transactions()[0]
+        assert row["bank"] == "santander"
+        assert row["type"] == "purchase"
+
+    def test_returns_false_for_nonexistent_id(self):
+        result = update_transaction(9999, {"amount": 100.0})
+        assert result is False
+
+    def test_category_none_is_not_uppercased(self):
+        insert_transactions([make_purchase()])
+        tx_id = get_transactions()[0]["id"]
+        update_transaction(tx_id, {"category": "food"})
+        update_transaction(tx_id, {"category": None})
+        assert get_transactions()[0]["category"] is None
+
+
+class TestDeleteTransaction:
+    def test_deletes_existing_transaction(self):
+        insert_transactions([make_purchase()])
+        tx_id = get_transactions()[0]["id"]
+        result = delete_transaction(tx_id)
+        assert result is True
+        assert get_transactions() == []
+
+    def test_returns_false_for_nonexistent_id(self):
+        result = delete_transaction(9999)
+        assert result is False
+
+    def test_only_deletes_targeted_row(self):
+        insert_transactions([make_purchase(amount=100), make_purchase(amount=200)])
+        rows = get_transactions()
+        delete_transaction(rows[0]["id"])
+        remaining = get_transactions()
+        assert len(remaining) == 1
+        assert remaining[0]["amount"] == rows[1]["amount"]

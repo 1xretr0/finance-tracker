@@ -57,14 +57,33 @@ nav a.active {
     margin-bottom: 24px;
 }
 
-.chart-section h2 {
-    font-size: 1rem;
-    color: #aaa;
+.chart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     margin-bottom: 16px;
 }
 
-.chart-section h2 span {
-    color: #fff;
+.chart-header h2 {
+    font-size: 1rem;
+    color: #aaa;
+}
+
+.year-nav {
+    display: flex;
+    align-items: center;
+    gap: 0;
+}
+
+.year-label {
+    padding: 6px 14px;
+    background: #2a2a2a;
+    color: #e0e0e0;
+    border: 1px solid #333;
+    font-size: 0.85rem;
+    font-weight: 600;
+    min-width: 60px;
+    text-align: center;
 }
 
 .breakdown-section {
@@ -121,7 +140,7 @@ nav a.active {
     color: #e0e0e0;
 }
 
-.breakdown-header input[type="month"] {
+.month-nav input[type="month"] {
     padding: 6px 12px;
     background: #2a2a2a;
     color: #e0e0e0;

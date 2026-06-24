@@ -29,7 +29,7 @@ Personal finance tracker that aggregates transaction data from multiple bank sou
 - `frontend/html/` — Page templates (index, categorize, transactions)
 - `frontend/css/` — Stylesheets (shared styles + page-specific)
 - `frontend/js/` — Page scripts (app.js, categorize.js, transactions.js, common.js)
-- `tests/` — pytest suite for parsers, storage, server API, and email body extraction (includes .eml fixtures)
+- `tests/` — pytest suite for parsers, storage, server API, and email body extraction (test data is inline strings, no fixture files)
 - `requirements.txt` — Python dependencies (Flask, Google API, pytest)
 - `credentials.json` — Google OAuth credentials (DO NOT commit)
 - `token.json` — OAuth token (DO NOT commit)
@@ -63,6 +63,9 @@ The system is designed to support multiple transaction sources. Santander MX is 
 - `GET /api/breakdown` — income/expense grouped by category for a month (param: `month`)
 - `GET /api/uncategorized` — transactions with no category assigned
 - `PUT /api/transactions/categorize` — batch assign categories `[{id, category}]`
+- `POST /api/transactions` — manually create a transaction `{type, amount, date, ...}` (returns 409 on duplicate)
+- `PUT /api/transactions/<id>` — update a transaction's `amount`, `merchant`, or `category`
+- `DELETE /api/transactions/<id>` — delete a transaction by ID
 - `GET /api/categories` — list all category names
 - `POST /api/categories` — create a new category `{name}`
 

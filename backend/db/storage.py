@@ -62,8 +62,9 @@ def insert_transactions(transactions: list[dict]) -> int:
                 INSERT INTO transactions
                     (bank, type, amount, currency, date, merchant, card_last4,
                      account_last4, dest_account_last4, dest_bank, sender_bank,
-                     source_account, tracking_key, concept, reference, person, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     source_account, tracking_key, concept, reference, person,
+                     category, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
                 (
                     tx["bank"],
@@ -82,6 +83,7 @@ def insert_transactions(transactions: list[dict]) -> int:
                     tx.get("concept"),
                     tx.get("reference"),
                     tx.get("person"),
+                    tx.get("category"),
                     datetime.now(timezone.utc).isoformat(),
                 ),
             )
@@ -193,3 +195,35 @@ def create_category(name: str) -> str:
         pass
     conn.close()
     return name
+
+
+UPDATABLE_FIELDS = {"amount", "merchant", "category"}
+
+
+def update_transaction(tx_id: int, fields: dict) -> bool:
+    """Updates allowed fields for a transaction. Returns True if row was found."""
+    to_update = {k: v for k, v in fields.items() if k in UPDATABLE_FIELDS}
+    if not to_update:
+        return False
+    if "category" in to_update and to_update["category"]:
+        to_update["category"] = to_update["category"].upper()
+    set_clause = ", ".join(f"{k} = ?" for k in to_update)
+    values = list(to_update.values()) + [tx_id]
+    conn = get_connection()
+    result = conn.execute(
+        f"UPDATE transactions SET {set_clause} WHERE id = ?", values
+    )
+    conn.commit()
+    updated = result.rowcount > 0
+    conn.close()
+    return updated
+
+
+def delete_transaction(tx_id: int) -> bool:
+    """Deletes a transaction by ID. Returns True if row was found."""
+    conn = get_connection()
+    result = conn.execute("DELETE FROM transactions WHERE id = ?", (tx_id,))
+    conn.commit()
+    deleted = result.rowcount > 0
+    conn.close()
+    return deleted
