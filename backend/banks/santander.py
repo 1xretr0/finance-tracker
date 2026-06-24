@@ -77,7 +77,7 @@ def fetch_transactions() -> list[dict]:
                 or tx.get("sender_bank")
                 or tx["type"]
             )
-            print(f"  ✓ {tx['date']} | ${tx['amount']:.2f} | {label} ({tx['type']})")
+            logger.info(f"  ✓ {tx['date']} | ${tx['amount']:.2f} | {label} ({tx['type']})")
         else:
             subject = _get_header(msg["payload"], "Subject")
             logger.warning(f"  ⚠ Could not parse transaction from: {subject}")

@@ -23,8 +23,9 @@ GMAIL_MAX_RESULTS = 250
 GMAIL_LABEL_SANTANDER = "santander_notifications"
 
 # File paths
-TOKEN_FILE = "token.json"
-CREDENTIALS_FILE = "credentials.json"
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+TOKEN_FILE = os.path.join(_PROJECT_ROOT, "token.json")
+CREDENTIALS_FILE = os.path.join(_PROJECT_ROOT, "credentials.json")
 SANTANDER_LAST_RUN_FILE = os.path.join(
     os.path.dirname(__file__), "banks", "santander_last_run.txt"
 )
