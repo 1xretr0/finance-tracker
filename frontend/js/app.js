@@ -27,7 +27,7 @@ async function loadSavingsChart() {
 
     const savingsByMonth = {};
     data.forEach((row) => {
-        savingsByMonth[row.month] = row.savings;
+        savingsByMonth[row.month] = row.total_savings;
     });
 
     const values = MONTHS.map((_, i) => {

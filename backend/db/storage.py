@@ -324,16 +324,25 @@ def get_savings(year: int) -> list[dict]:
     with _connection() as conn:
         rows = conn.execute(
             """
-            SELECT SUBSTR(date, 1, 7) as month,
-                   SUM(CASE WHEN type = ? THEN amount ELSE 0 END) as income,
-                   SUM(CASE WHEN type = ? THEN amount ELSE 0 END) as purchases,
-                   SUM(CASE WHEN type = ? THEN amount ELSE 0 END) as outgoing
-            FROM transactions
-            WHERE date >= ? AND date < ?
+            SELECT 
+                SUBSTR(date, 1, 7) as month,
+                IFNULL((SELECT SUM(amount) FROM transactions WHERE type = ? AND SUBSTR(date, 1, 7) <= SUBSTR(main.date, 1, 7)), 0) AS total_income,
+                IFNULL((SELECT SUM(amount) FROM transactions WHERE (type = ? OR type = ?) AND SUBSTR(date, 1, 7) <= SUBSTR(main.date, 1, 7)), 0) AS total_outcome,
+                SUM(CASE WHEN type = ? THEN amount ELSE 0 END) as income,
+                SUM(CASE WHEN type = ? THEN amount ELSE 0 END) as purchases,
+                SUM(CASE WHEN type = ? THEN amount ELSE 0 END) as outgoing
+            FROM 
+                transactions main
+            WHERE 
+                date >= ? AND 
+                date < ?
             GROUP BY month
             ORDER BY month
         """,
             (
+                TX_TYPE_TRANSFER,
+                TX_TYPE_PURCHASE,
+                TX_TYPE_OUTGOING_TRANSFER,
                 TX_TYPE_TRANSFER,
                 TX_TYPE_PURCHASE,
                 TX_TYPE_OUTGOING_TRANSFER,
@@ -346,5 +355,6 @@ def get_savings(year: int) -> list[dict]:
         for row in rows:
             r = dict(row)
             r["savings"] = r["income"] - r["purchases"] - r["outgoing"]
+            r["total_savings"] = r["total_income"] - r["total_outcome"]
             result.append(r)
         return result
