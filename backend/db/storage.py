@@ -9,7 +9,16 @@ from backend.constants import (
     TX_TYPE_PURCHASE,
     TX_TYPE_TRANSFER,
     TX_TYPE_OUTGOING_TRANSFER,
+    UPDATABLE_FIELDS
 )
+
+
+def _end_of_day(date_str: str) -> str:
+    """If date_str is date-only (YYYY-MM-DD), append T23:59:59 so that
+    '<=' comparisons include all timestamps within that day."""
+    if date_str and "T" not in date_str:
+        return date_str + "T23:59:59"
+    return date_str
 
 
 def get_connection() -> sqlite3.Connection:
@@ -139,7 +148,7 @@ def get_transactions(
             params.append(start_date)
         if end_date:
             query += " AND date <= ?"
-            params.append(end_date)
+            params.append(_end_of_day(end_date))
         if person:
             query += " AND person = ?"
             params.append(person)
@@ -162,7 +171,7 @@ def get_summary(start_date: str | None = None, end_date: str | None = None) -> d
             params.append(start_date)
         if end_date:
             query += " AND date <= ?"
-            params.append(end_date)
+            params.append(_end_of_day(end_date))
         query += " GROUP BY type"
 
         rows = conn.execute(query, params).fetchall()
@@ -209,10 +218,6 @@ def create_category(name: str) -> str:
             pass
         return name
 
-
-UPDATABLE_FIELDS = {"amount", "merchant", "category"}
-
-
 def update_transaction(tx_id: int, fields: dict) -> bool:
     """Updates allowed fields for a transaction. Returns True if row was found."""
     to_update = {k: v for k, v in fields.items() if k in UPDATABLE_FIELDS}
@@ -251,7 +256,7 @@ def get_monthly_totals(
             params.append(start_date)
         if end_date:
             query += " AND date <= ?"
-            params.append(end_date)
+            params.append(_end_of_day(end_date))
         query += " GROUP BY month, type ORDER BY month"
         rows = conn.execute(query, params).fetchall()
         return [dict(row) for row in rows]
@@ -273,7 +278,7 @@ def get_merchant_totals(
             params.append(start_date)
         if end_date:
             query += " AND date <= ?"
-            params.append(end_date)
+            params.append(_end_of_day(end_date))
         query += " GROUP BY merchant ORDER BY total DESC"
         rows = conn.execute(query, params).fetchall()
         return [dict(row) for row in rows]
