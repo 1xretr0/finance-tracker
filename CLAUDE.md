@@ -51,7 +51,7 @@ The system is designed to support multiple transaction sources. Santander MX is 
 
 - `/` — Overview: savings line chart, monthly income/expense doughnut breakdown, quarterly savings cards
 - `/categorize` — Assign categories to uncategorized transactions one by one
-- `/transactions` — Side-by-side income/expense tables with quarter filter
+- `/transactions` — Side-by-side income/expense tables with month filter
 
 ## API Endpoints
 

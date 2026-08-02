@@ -5,6 +5,8 @@ let categories = [];
 let currentMonth = null;
 let incomeRows = [];
 let incomeSort = { field: null, dir: "asc" };
+let expenseRows = [];
+let expenseFilter = { field: null, query: "" };
 
 // ---------------------------------------------------------------------------
 // Data loading & rendering
@@ -24,11 +26,12 @@ async function loadTransactions(monthStr) {
     const expenses = transactions.filter((tx) => tx.type === TX_TYPE_PURCHASE || tx.type === TX_TYPE_OUTGOING_TRANSFER);
 
     incomeRows = income;
+    expenseRows = expenses;
 
     exitEditMode("income");
     exitEditMode("expense");
     renderTable("income-table", sortIncomeRows(incomeRows), "income");
-    renderTable("expense-table", expenses, "expense");
+    renderTable("expense-table", filterExpenseRows(expenseRows), "expense");
 }
 
 function renderTable(tableId, rows, type) {
@@ -132,6 +135,7 @@ function initSort() {
 
     btn.addEventListener("click", (e) => {
         e.stopPropagation();
+        closeFilterMenu();
         const willOpen = menu.hidden;
         menu.hidden = !willOpen;
         btn.setAttribute("aria-expanded", String(willOpen));
@@ -155,6 +159,121 @@ function initSort() {
 
     document.addEventListener("click", () => {
         if (!menu.hidden) closeSortMenu();
+    });
+}
+
+// ---------------------------------------------------------------------------
+// Expense filtering
+// ---------------------------------------------------------------------------
+function expenseFilterValue(tx, field) {
+    switch (field) {
+        case "date":
+            return (tx.date || "").replace("T", " ").slice(0, 16).toLowerCase();
+        case "amount":
+            return String(tx.amount ?? "").toLowerCase();
+        case "description":
+            return (tx.merchant || tx.dest_bank || "").toLowerCase();
+        case "category":
+            return (tx.category || "").toLowerCase();
+        default:
+            return "";
+    }
+}
+
+function filterExpenseRows(rows) {
+    const query = expenseFilter.query.trim().toLowerCase();
+    if (!expenseFilter.field || !query) return rows;
+    return rows.filter((tx) => expenseFilterValue(tx, expenseFilter.field).includes(query));
+}
+
+// Keep the cached expense rows in sync with an inline edit so a later re-filter
+// reflects the change instead of reverting to the loaded data.
+function syncExpenseCache(id, { amount, description, category }) {
+    const tx = expenseRows.find((t) => String(t.id) === String(id));
+    if (!tx) return;
+    tx.amount = amount;
+    tx.merchant = description;
+    tx.dest_bank = null;
+    tx.category = category;
+}
+
+function updateFilterMenu() {
+    const menu = document.getElementById("expense-filter-menu");
+    menu.querySelectorAll(".filter-option").forEach((opt) => {
+        opt.classList.toggle("active", opt.dataset.field === expenseFilter.field);
+    });
+}
+
+function closeFilterMenu() {
+    const btn = document.getElementById("expense-filter-btn");
+    const menu = document.getElementById("expense-filter-menu");
+    menu.hidden = true;
+    btn.setAttribute("aria-expanded", "false");
+}
+
+function applyExpenseFilter() {
+    btnFilterActiveState();
+    renderTable("expense-table", filterExpenseRows(expenseRows), "expense");
+}
+
+function btnFilterActiveState() {
+    const btn = document.getElementById("expense-filter-btn");
+    const active = Boolean(expenseFilter.field && expenseFilter.query.trim());
+    btn.classList.toggle("active", active);
+}
+
+function clearExpenseFilter() {
+    const input = document.getElementById("expense-filter-input");
+    expenseFilter = { field: null, query: "" };
+    input.value = "";
+    input.disabled = true;
+    input.placeholder = "Select a column first";
+    updateFilterMenu();
+    applyExpenseFilter();
+}
+
+function initFilter() {
+    const btn = document.getElementById("expense-filter-btn");
+    const menu = document.getElementById("expense-filter-menu");
+    const input = document.getElementById("expense-filter-input");
+    const clearBtn = document.getElementById("expense-filter-clear");
+
+    btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        closeSortMenu();
+        const willOpen = menu.hidden;
+        menu.hidden = !willOpen;
+        btn.setAttribute("aria-expanded", String(willOpen));
+        if (willOpen) {
+            updateFilterMenu();
+            if (expenseFilter.field) input.focus();
+        }
+    });
+
+    menu.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const opt = e.target.closest(".filter-option");
+        if (!opt) return;
+        expenseFilter.field = opt.dataset.field;
+        input.disabled = false;
+        input.placeholder = `Filter by ${opt.textContent.toLowerCase()}…`;
+        updateFilterMenu();
+        input.focus();
+        applyExpenseFilter();
+    });
+
+    input.addEventListener("input", () => {
+        expenseFilter.query = input.value;
+        applyExpenseFilter();
+    });
+
+    clearBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        clearExpenseFilter();
+    });
+
+    document.addEventListener("click", () => {
+        if (!menu.hidden) closeFilterMenu();
     });
 }
 
@@ -286,6 +405,11 @@ async function saveRow(row) {
                 description: newDescription,
                 category: newCategory.toUpperCase() || null,
             });
+            syncExpenseCache(id, {
+                amount: newAmount,
+                description: newDescription,
+                category: newCategory.toUpperCase() || null,
+            });
             deselectRow(row);
             showToast("Saved", "success");
         } else {
@@ -304,6 +428,7 @@ async function deleteRow(row) {
         });
         if (res.ok) {
             incomeRows = incomeRows.filter((tx) => String(tx.id) !== String(id));
+            expenseRows = expenseRows.filter((tx) => String(tx.id) !== String(id));
             row.remove();
             showToast("Deleted", "success");
         } else {
@@ -533,4 +658,5 @@ loadCategories().then(() => {
     initEditMode();
     initNewTxModal();
     initSort();
+    initFilter();
 });

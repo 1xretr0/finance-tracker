@@ -66,6 +66,19 @@
                     <div class="table-section-actions">
                         <button class="btn-new-tx" data-type="expense">+ New</button>
                         <button class="btn-edit-table" data-table="expense">Edit</button>
+                        <div class="filter-wrapper">
+                            <button class="btn-filter-table" id="expense-filter-btn" aria-haspopup="true" aria-expanded="false">Filter</button>
+                            <div class="filter-menu" id="expense-filter-menu" hidden>
+                                <div class="filter-fields">
+                                    <button class="filter-option" data-field="date">Date</button>
+                                    <button class="filter-option" data-field="amount">Amount</button>
+                                    <button class="filter-option" data-field="description">Description</button>
+                                    <button class="filter-option" data-field="category">Category</button>
+                                </div>
+                                <input type="text" class="filter-input" id="expense-filter-input" placeholder="Select a column first" disabled>
+                                <button class="filter-clear" id="expense-filter-clear">Clear filter</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <table id="expense-table">
