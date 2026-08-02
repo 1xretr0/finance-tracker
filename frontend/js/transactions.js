@@ -1,6 +1,14 @@
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
 let categories = [];
 let currentMonth = null;
+let incomeRows = [];
+let incomeSort = { field: null, dir: "asc" };
 
+// ---------------------------------------------------------------------------
+// Data loading & rendering
+// ---------------------------------------------------------------------------
 async function loadTransactions(monthStr) {
     const { start, end } = getMonthDateRange(monthStr);
 
@@ -15,9 +23,11 @@ async function loadTransactions(monthStr) {
     const income = transactions.filter((tx) => tx.type === TX_TYPE_TRANSFER);
     const expenses = transactions.filter((tx) => tx.type === TX_TYPE_PURCHASE || tx.type === TX_TYPE_OUTGOING_TRANSFER);
 
+    incomeRows = income;
+
     exitEditMode("income");
     exitEditMode("expense");
-    renderTable("income-table", income, "income");
+    renderTable("income-table", sortIncomeRows(incomeRows), "income");
     renderTable("expense-table", expenses, "expense");
 }
 
@@ -57,6 +67,100 @@ function renderTable(tableId, rows, type) {
         .join("");
 }
 
+// ---------------------------------------------------------------------------
+// Income sorting
+// ---------------------------------------------------------------------------
+function incomeSortValue(tx, field) {
+    switch (field) {
+        case "date":
+            return tx.date || "";
+        case "amount":
+            return parseFloat(tx.amount) || 0;
+        case "source":
+            return (tx.sender_bank || tx.concept || "").toLowerCase();
+        case "category":
+            return (tx.category || "").toLowerCase();
+        default:
+            return "";
+    }
+}
+
+function sortIncomeRows(rows) {
+    if (!incomeSort.field) return rows;
+
+    const sorted = [...rows].sort((a, b) => {
+        const av = incomeSortValue(a, incomeSort.field);
+        const bv = incomeSortValue(b, incomeSort.field);
+        if (av < bv) return -1;
+        if (av > bv) return 1;
+        return 0;
+    });
+
+    if (incomeSort.dir === "desc") sorted.reverse();
+    return sorted;
+}
+
+// Keep the cached income rows in sync with an inline edit so a later re-sort
+// reflects the change instead of reverting to the loaded data.
+function syncIncomeCache(id, { amount, description, category }) {
+    const tx = incomeRows.find((t) => String(t.id) === String(id));
+    if (!tx) return;
+    tx.amount = amount;
+    tx.sender_bank = description;
+    tx.concept = null;
+    tx.category = category;
+}
+
+function updateSortMenu() {
+    const menu = document.getElementById("income-sort-menu");
+    menu.querySelectorAll(".sort-option").forEach((opt) => {
+        opt.classList.toggle("active", opt.dataset.field === incomeSort.field);
+        opt.dataset.dir = opt.dataset.field === incomeSort.field ? incomeSort.dir : "";
+    });
+}
+
+function closeSortMenu() {
+    const btn = document.getElementById("income-sort-btn");
+    const menu = document.getElementById("income-sort-menu");
+    menu.hidden = true;
+    btn.setAttribute("aria-expanded", "false");
+}
+
+function initSort() {
+    const btn = document.getElementById("income-sort-btn");
+    const menu = document.getElementById("income-sort-menu");
+
+    btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const willOpen = menu.hidden;
+        menu.hidden = !willOpen;
+        btn.setAttribute("aria-expanded", String(willOpen));
+        if (willOpen) updateSortMenu();
+    });
+
+    menu.addEventListener("click", (e) => {
+        const opt = e.target.closest(".sort-option");
+        if (!opt) return;
+        const field = opt.dataset.field;
+        if (incomeSort.field === field) {
+            incomeSort.dir = incomeSort.dir === "asc" ? "desc" : "asc";
+        } else {
+            incomeSort.field = field;
+            incomeSort.dir = "asc";
+        }
+        btn.classList.add("active");
+        updateSortMenu();
+        renderTable("income-table", sortIncomeRows(incomeRows), "income");
+    });
+
+    document.addEventListener("click", () => {
+        if (!menu.hidden) closeSortMenu();
+    });
+}
+
+// ---------------------------------------------------------------------------
+// Inline row editing
+// ---------------------------------------------------------------------------
 function enterEditMode(tableType) {
     const section = document.getElementById(`${tableType}-section`);
     section.classList.add("edit-mode");
@@ -177,6 +281,11 @@ async function saveRow(row) {
             row.dataset.amount = newAmount;
             row.dataset.description = newDescription;
             row.dataset.category = newCategory.toUpperCase();
+            syncIncomeCache(id, {
+                amount: newAmount,
+                description: newDescription,
+                category: newCategory.toUpperCase() || null,
+            });
             deselectRow(row);
             showToast("Saved", "success");
         } else {
@@ -194,6 +303,7 @@ async function deleteRow(row) {
             method: "DELETE",
         });
         if (res.ok) {
+            incomeRows = incomeRows.filter((tx) => String(tx.id) !== String(id));
             row.remove();
             showToast("Deleted", "success");
         } else {
@@ -251,6 +361,9 @@ function initEditMode() {
     });
 }
 
+// ---------------------------------------------------------------------------
+// Categories
+// ---------------------------------------------------------------------------
 async function loadCategories() {
     categories = await fetchJSON("/api/categories");
 }
@@ -267,6 +380,9 @@ function buildCategoryDatalist() {
     document.body.appendChild(dl);
 }
 
+// ---------------------------------------------------------------------------
+// Month filter
+// ---------------------------------------------------------------------------
 function initMonthFilter() {
     const input = document.getElementById("transactions-month");
     const prevBtn = document.getElementById("month-prev");
@@ -296,6 +412,9 @@ function initMonthFilter() {
     });
 }
 
+// ---------------------------------------------------------------------------
+// New transaction modal
+// ---------------------------------------------------------------------------
 function openNewTxModal(txType) {
     const modal = document.getElementById("new-tx-modal");
     const form = document.getElementById("new-tx-form");
@@ -405,9 +524,13 @@ function initNewTxModal() {
     document.getElementById("new-tx-form").addEventListener("submit", submitNewTx);
 }
 
+// ---------------------------------------------------------------------------
+// Bootstrap
+// ---------------------------------------------------------------------------
 loadCategories().then(() => {
     buildCategoryDatalist();
     initMonthFilter();
     initEditMode();
     initNewTxModal();
+    initSort();
 });

@@ -1,3 +1,6 @@
+/* --------------------------------------------------------------------------
+   Page header
+   -------------------------------------------------------------------------- */
 .transactions-header {
     display: flex;
     justify-content: space-between;
@@ -10,6 +13,9 @@
     color: var(--text-secondary);
 }
 
+/* --------------------------------------------------------------------------
+   Layout
+   -------------------------------------------------------------------------- */
 .tables-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -31,6 +37,9 @@
     margin-bottom: var(--space-md);
 }
 
+/* --------------------------------------------------------------------------
+   Table
+   -------------------------------------------------------------------------- */
 table {
     width: 100%;
     border-collapse: collapse;
@@ -71,6 +80,9 @@ td {
     padding: var(--space-lg);
 }
 
+/* --------------------------------------------------------------------------
+   Section header & action buttons (New / Edit / Sort)
+   -------------------------------------------------------------------------- */
 .table-section-header {
     display: flex;
     justify-content: space-between;
@@ -80,6 +92,28 @@ td {
 
 .table-section-header h3 {
     margin-bottom: 0;
+}
+
+.table-section-actions {
+    display: flex;
+    gap: var(--space-sm);
+}
+
+.btn-new-tx {
+    padding: 5px 14px;
+    background: var(--bg-input);
+    color: var(--color-income);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-weight: 600;
+    transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.btn-new-tx:hover {
+    background: var(--border);
+    border-color: var(--color-income);
 }
 
 .btn-edit-table {
@@ -104,6 +138,88 @@ td {
     border-color: var(--color-expense);
 }
 
+.btn-sort-table {
+    padding: 5px 14px;
+    background: var(--bg-input);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 0.8rem;
+    transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.btn-sort-table:hover {
+    background: var(--border);
+    color: var(--text-primary);
+}
+
+.btn-sort-table.active {
+    color: var(--color-income);
+    border-color: var(--color-income);
+}
+
+/* --------------------------------------------------------------------------
+   Sort menu
+   -------------------------------------------------------------------------- */
+.sort-wrapper {
+    position: relative;
+}
+
+.sort-menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    min-width: 140px;
+    padding: 4px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.sort-menu[hidden] {
+    display: none;
+}
+
+.sort-option {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 10px;
+    background: none;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    text-align: left;
+    cursor: pointer;
+    transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.sort-option:hover {
+    background: var(--bg-input);
+    color: var(--text-primary);
+}
+
+.sort-option.active {
+    color: var(--color-income);
+}
+
+.sort-option.active[data-dir="asc"]::after {
+    content: "\2191";
+}
+
+.sort-option.active[data-dir="desc"]::after {
+    content: "\2193";
+}
+
+/* --------------------------------------------------------------------------
+   Edit mode — selector & action columns
+   -------------------------------------------------------------------------- */
 .col-selector,
 .col-actions {
     width: 0;
@@ -149,6 +265,9 @@ td {
     padding: 10px 8px;
 }
 
+/* --------------------------------------------------------------------------
+   Edit mode — row selection
+   -------------------------------------------------------------------------- */
 .row-selector {
     display: inline-block;
     width: 16px;
@@ -172,6 +291,9 @@ tr.row-selected {
     background: rgba(74, 222, 128, 0.05);
 }
 
+/* --------------------------------------------------------------------------
+   Edit mode — inline inputs & row actions
+   -------------------------------------------------------------------------- */
 .inline-edit-input {
     width: 100%;
     padding: 4px 8px;
@@ -224,28 +346,9 @@ tr.row-selected {
     background: rgba(248, 113, 113, 0.1);
 }
 
-.table-section-actions {
-    display: flex;
-    gap: var(--space-sm);
-}
-
-.btn-new-tx {
-    padding: 5px 14px;
-    background: var(--bg-input);
-    color: var(--color-income);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    font-size: 0.8rem;
-    font-weight: 600;
-    transition: background var(--transition-fast), border-color var(--transition-fast);
-}
-
-.btn-new-tx:hover {
-    background: var(--border);
-    border-color: var(--color-income);
-}
-
+/* --------------------------------------------------------------------------
+   New transaction modal
+   -------------------------------------------------------------------------- */
 .modal-overlay {
     position: fixed;
     inset: 0;
@@ -360,6 +463,9 @@ tr.row-selected {
     background: #34d399;
 }
 
+/* --------------------------------------------------------------------------
+   Responsive
+   -------------------------------------------------------------------------- */
 @media (max-width: 768px) {
     .tables-grid {
         grid-template-columns: 1fr;

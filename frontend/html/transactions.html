@@ -34,6 +34,15 @@
                     <div class="table-section-actions">
                         <button class="btn-new-tx" data-type="income">+ New</button>
                         <button class="btn-edit-table" data-table="income">Edit</button>
+                        <div class="sort-wrapper">
+                            <button class="btn-sort-table" id="income-sort-btn" aria-haspopup="true" aria-expanded="false">Sort</button>
+                            <div class="sort-menu" id="income-sort-menu" hidden>
+                                <button class="sort-option" data-field="date">Date</button>
+                                <button class="sort-option" data-field="amount">Amount</button>
+                                <button class="sort-option" data-field="source">Source</button>
+                                <button class="sort-option" data-field="category">Category</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <table id="income-table">
