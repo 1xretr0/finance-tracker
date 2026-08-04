@@ -134,6 +134,56 @@ class TestPurchaseNarrativeParser:
         assert tx["amount"] == 1234.56
 
 
+UNIQUE_POINTS_PURCHASE_EMAIL = """\
+Hola, Estimado Cliente.
+
+03/08/2026.
+
+Realizaste una compra con tu Tarjeta cr=E9dito terminaci=F3n 5788
+
+Te informamos que se autoriz=F3 una compra
+en WL *STEAM PURCHASE por un monto
+de $1,999.00 M.N.
+
+115
+"""
+
+
+class TestUniquePointsPurchaseParser:
+    def test_parses_amount(self):
+        tx = parse_transaction(UNIQUE_POINTS_PURCHASE_EMAIL)
+        assert tx["amount"] == 1999.00
+
+    def test_parses_merchant(self):
+        tx = parse_transaction(UNIQUE_POINTS_PURCHASE_EMAIL)
+        assert tx["merchant"] == "WL *STEAM PURCHASE"
+
+    def test_parses_card_last4(self):
+        tx = parse_transaction(UNIQUE_POINTS_PURCHASE_EMAIL)
+        assert tx["card_last4"] == "5788"
+
+    def test_parses_date(self):
+        tx = parse_transaction(UNIQUE_POINTS_PURCHASE_EMAIL)
+        assert tx["date"] == "2026-08-03T00:00:00"
+
+    def test_type_is_purchase(self):
+        tx = parse_transaction(UNIQUE_POINTS_PURCHASE_EMAIL)
+        assert tx["type"] == "purchase"
+
+    def test_currency_is_mxn(self):
+        tx = parse_transaction(UNIQUE_POINTS_PURCHASE_EMAIL)
+        assert tx["currency"] == "MXN"
+
+    def test_bank_is_santander(self):
+        tx = parse_transaction(UNIQUE_POINTS_PURCHASE_EMAIL)
+        assert tx["bank"] == "santander"
+
+    def test_amount_with_thousands(self):
+        email = UNIQUE_POINTS_PURCHASE_EMAIL.replace("$1,999.00", "$12,345.67")
+        tx = parse_transaction(email)
+        assert tx["amount"] == 12345.67
+
+
 class TestTransferParser:
     def test_parses_amount(self):
         tx = parse_transaction(TRANSFER_EMAIL)

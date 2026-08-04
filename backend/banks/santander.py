@@ -137,6 +137,8 @@ def parse_transaction(plain_text: str) -> dict | None:
         return _parse_outgoing_transfer(decoded)
     if "una compra en el comercio" in decoded.lower():
         return _parse_purchase_narrative(decoded)
+    if "por un monto" in decoded.lower() and "m.n." in decoded.lower():
+        return _parse_unique_points_purchase(decoded)
     return _parse_purchase(decoded)
 
 
@@ -180,6 +182,33 @@ def _parse_purchase_narrative(decoded: str) -> dict | None:
     amount_str = amount_match.group(1).replace(",", "")
     time_str = time_match.group(1) if time_match else "00:00:00"
     date_str = f"{date_match.group(1)} {time_str}"
+    tx_date = datetime.strptime(date_str, DATE_FORMAT_TX)
+
+    return {
+        "bank": BANK_SANTANDER,
+        "card_last4": card_match.group(1) if card_match else None,
+        "amount": float(amount_str),
+        "currency": CURRENCY_MXN,
+        "merchant": merchant_match.group(1).strip(),
+        "date": tx_date.isoformat(),
+        "type": TX_TYPE_PURCHASE,
+    }
+
+
+def _parse_unique_points_purchase(decoded: str) -> dict | None:
+    """Parses the 'Unique Points' rewards-style purchase notification."""
+    merchant_match = re.search(
+        r"una compra\s+en\s+(.+?)\s+por un monto", decoded, re.IGNORECASE | re.DOTALL
+    )
+    card_match = re.search(r"terminaci[oó]n\s*\*{0,2}(\d{4})", decoded)
+    amount_match = re.search(r"por un monto\s+de\s*\$([0-9,]+\.\d{2})", decoded)
+    date_match = re.search(r"(\d{2}/\d{2}/\d{4})", decoded)
+
+    if not amount_match or not merchant_match or not date_match:
+        return None
+
+    amount_str = amount_match.group(1).replace(",", "")
+    date_str = f"{date_match.group(1)} 00:00:00"
     tx_date = datetime.strptime(date_str, DATE_FORMAT_TX)
 
     return {
