@@ -1,3 +1,6 @@
+# ---------------------------------------------------------------------------
+# Santander MX transaction fetcher & email parser
+# ---------------------------------------------------------------------------
 import logging
 import os
 import re
@@ -28,10 +31,10 @@ from backend.constants import (
     MONTHS_ES,
     IGNORED_ACCOUNT_TRANSFERS,
     PATTERN_INCOMING_TRANSFER_UPPER,
-    PATTERN_INCOMING_TRANSFER_SPEI,
     PATTERN_OUTGOING_TRANSFER_NARRATIVE,
     PATTERN_OUTGOING_TRANSFER_CONFIRMATION,
     PATTERN_OUTGOING_TRANSFER_CONFIRMATION_DETAILS,
+    PATTERN_PURCHASE_SUBJECT,
     PATTERN_PURCHASE_NARRATIVE,
     PATTERN_UNIQUE_POINTS_PURCHASE_AMOUNT,
     PATTERN_UNIQUE_POINTS_PURCHASE_CURRENCY,
@@ -41,6 +44,9 @@ from backend.constants import (
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Gmail fetch & orchestration
+# ---------------------------------------------------------------------------
 def fetch_transactions() -> list[dict]:
     """Fetches Santander purchase notifications from Gmail and returns parsed transactions."""
     service = build(
@@ -94,14 +100,16 @@ def fetch_transactions() -> list[dict]:
 
     return transactions
 
-
+# ---------------------------------------------------------------------------
+# Last run tracking
+# ---------------------------------------------------------------------------
 def _get_last_run_date() -> str | None:
     if os.path.exists(SANTANDER_LAST_RUN_FILE):
         with open(SANTANDER_LAST_RUN_FILE) as f:
             date = f.read().strip()
             logger.info(f"Last run date: {date}")
             return date
-    
+
     logger.warning("No last run date file found!")
     return None
 
@@ -112,10 +120,12 @@ def save_last_run_date():
     epoch = int(datetime.now(ZoneInfo("America/Mexico_City")).timestamp())
     with open(SANTANDER_LAST_RUN_FILE, "w") as f:
         f.write(str(epoch))
-    
+
     logger.info("Last run date saved!")
 
-
+# ---------------------------------------------------------------------------
+# Gmail OAuth authentication
+# ---------------------------------------------------------------------------
 def _authenticate():
     creds = None
     if os.path.exists(TOKEN_FILE):
@@ -132,28 +142,44 @@ def _authenticate():
             f.write(creds.to_json())
     return creds
 
-
+# ---------------------------------------------------------------------------
+# Transaction parser dispatch
+# ---------------------------------------------------------------------------
 def parse_transaction(plain_text: str) -> dict | None:
     """Parses a Santander notification plain text body into transaction data."""
-    raw = quopri.decodestring(plain_text.encode("utf-8", errors="ignore"))
+    # Fix double-encoding issue: plain_text was decoded as latin-1 but is actually UTF-8
+    # Re-encode as latin-1 bytes, then decode as UTF-8 to restore original characters
+    try:
+        corrected = plain_text.encode("latin-1").decode("utf-8")
+    except (UnicodeDecodeError, UnicodeEncodeError):
+        corrected = plain_text
+
+    raw = quopri.decodestring(corrected.encode("utf-8", errors="ignore"))
     try:
         decoded = raw.decode("utf-8")
     except UnicodeDecodeError:
         decoded = raw.decode("latin-1")
 
-    if PATTERN_INCOMING_TRANSFER_UPPER in decoded.upper() and PATTERN_INCOMING_TRANSFER_SPEI in decoded.upper():
+    if PATTERN_INCOMING_TRANSFER_UPPER in decoded.lower():
         return _parse_incoming_transfer(decoded)
+
     if PATTERN_OUTGOING_TRANSFER_NARRATIVE in decoded.lower():
         return _parse_outgoing_transfer(decoded)
+
     if PATTERN_OUTGOING_TRANSFER_CONFIRMATION in decoded.lower() and PATTERN_OUTGOING_TRANSFER_CONFIRMATION_DETAILS in decoded.lower():
         return _parse_outgoing_transfer_confirmation(decoded)
+
     if PATTERN_PURCHASE_NARRATIVE in decoded.lower():
         return _parse_purchase_narrative(decoded)
+
     if PATTERN_UNIQUE_POINTS_PURCHASE_AMOUNT in decoded.lower() and PATTERN_UNIQUE_POINTS_PURCHASE_CURRENCY in decoded.lower():
         return _parse_unique_points_purchase(decoded)
+
     return _parse_purchase(decoded)
 
-
+# ---------------------------------------------------------------------------
+# Purchase parsers (field-style & narrative-style)
+# ---------------------------------------------------------------------------
 def _parse_purchase(decoded: str) -> dict | None:
     card_match = re.search(rf"{PATTERN_ACCOUNT_TERMINATION}:\s*(\d{{4}})", decoded)
     amount_match = re.search(r"Monto:\s*\$([0-9,]+\.\d{2})\s*(MXN)?", decoded)
@@ -233,7 +259,9 @@ def _parse_unique_points_purchase(decoded: str) -> dict | None:
         "type": TX_TYPE_PURCHASE,
     }
 
-
+# ---------------------------------------------------------------------------
+# Transfer parsers (incoming & outgoing)
+# ---------------------------------------------------------------------------
 def _parse_incoming_transfer(decoded: str) -> dict | None:
     """
     :param decoded: decoded email content of the transaction
@@ -342,7 +370,9 @@ def _parse_outgoing_transfer_confirmation(decoded: str) -> dict | None:
         "type": TX_TYPE_OUTGOING_TRANSFER,
     }
 
-
+# ---------------------------------------------------------------------------
+# Internal transfer filtering
+# ---------------------------------------------------------------------------
 def _is_internal_transfer(destination_account_digits, destination_bank_name) -> bool:
     if not destination_account_digits or not destination_bank_name:
         return False
@@ -358,7 +388,9 @@ def _is_internal_transfer(destination_account_digits, destination_bank_name) -> 
         logger.info(f"Ignoring internal transfer to account {account} at {bank}")
     return is_ignored
 
-
+# ---------------------------------------------------------------------------
+# Gmail message body extraction utilities
+# ---------------------------------------------------------------------------
 def _extract_plain_body(payload: dict) -> str | None:
     """Extracts the text/plain body from a Gmail message payload."""
     parts = [payload]

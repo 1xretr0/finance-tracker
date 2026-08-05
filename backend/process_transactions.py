@@ -1,3 +1,6 @@
+# ---------------------------------------------------------------------------
+# Transaction ingestion orchestrator
+# ---------------------------------------------------------------------------
 import logging
 
 from backend.banks.santander import (
@@ -9,7 +12,9 @@ from backend.db.storage import init_db, insert_transactions, get_summary
 logging.basicConfig(level=logging.INFO, format="%(levelname)s - %(name)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-
+# ---------------------------------------------------------------------------
+# Main workflow
+# ---------------------------------------------------------------------------
 def main():
     init_db()
 
@@ -41,6 +46,8 @@ def main():
                 f"  {tx_type}: {data['count']} transactions, ${data['total']:,.2f} MXN"
             )
 
-
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
 if __name__ == "__main__":
     main()

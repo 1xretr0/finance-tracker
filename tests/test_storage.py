@@ -1,3 +1,6 @@
+# ---------------------------------------------------------------------------
+# Tests for SQLite storage layer
+# ---------------------------------------------------------------------------
 import pytest
 from backend.db.storage import (
     init_db, insert_transactions, get_transactions, get_summary, get_connection,
@@ -6,7 +9,9 @@ from backend.db.storage import (
 )
 import backend.db.storage as storage
 
-
+# ---------------------------------------------------------------------------
+# Test fixtures
+# ---------------------------------------------------------------------------
 @pytest.fixture(autouse=True)
 def use_temp_db(tmp_path, monkeypatch):
     db_path = str(tmp_path / "test.db")
@@ -14,7 +19,9 @@ def use_temp_db(tmp_path, monkeypatch):
     init_db()
     yield db_path
 
-
+# ---------------------------------------------------------------------------
+# Test data factories
+# ---------------------------------------------------------------------------
 def make_purchase(amount=100.0, date="2026-06-15T15:01:07", merchant="OXXO"):
     return {
         "bank": "santander",
@@ -41,7 +48,9 @@ def make_transfer(amount=5000.0, date="2026-06-12T12:03:00"):
         "concept": "NOMINA",
     }
 
-
+# ---------------------------------------------------------------------------
+# Test suite: Insert operations
+# ---------------------------------------------------------------------------
 class TestInsert:
     def test_inserts_single_transaction(self):
         count = insert_transactions([make_purchase()])
@@ -72,7 +81,9 @@ class TestInsert:
         assert row["tracking_key"] == "HSBC628982"
         assert row["concept"] == "NOMINA"
 
-
+# ---------------------------------------------------------------------------
+# Test suite: Query operations
+# ---------------------------------------------------------------------------
 class TestQuery:
     def test_filter_by_bank(self):
         insert_transactions([make_purchase()])
@@ -112,7 +123,9 @@ class TestQuery:
         rows = get_transactions()
         assert rows[0]["date"] > rows[1]["date"]
 
-
+# ---------------------------------------------------------------------------
+# Test suite: Summary & aggregation operations
+# ---------------------------------------------------------------------------
 class TestSummary:
     def test_groups_by_type(self):
         insert_transactions([
@@ -139,7 +152,9 @@ class TestSummary:
         assert summary["purchase"]["count"] == 1
         assert summary["purchase"]["total"] == 200.0
 
-
+# ---------------------------------------------------------------------------
+# Test suite: Raw SQL queries (verification tests)
+# ---------------------------------------------------------------------------
 class TestRawSQL:
     """Direct SQL SELECT queries against the database to verify stored records."""
 
@@ -261,7 +276,9 @@ class TestRawSQL:
         assert row["tracking_key"] == "HSBC628982"
         assert row["concept"] == "NOMINA"
 
-
+# ---------------------------------------------------------------------------
+# Test suite: Category management operations
+# ---------------------------------------------------------------------------
 class TestGetUncategorized:
     def test_returns_only_uncategorized(self):
         insert_transactions([make_purchase(merchant="OXXO"), make_purchase(amount=200, merchant="VIPS")])
@@ -351,7 +368,9 @@ class TestCreateCategory:
         assert name == "TRANSPORT"
         assert "TRANSPORT" in get_categories()
 
-
+# ---------------------------------------------------------------------------
+# Test suite: Transaction update & delete operations
+# ---------------------------------------------------------------------------
 class TestUpdateTransaction:
     def test_updates_amount(self):
         insert_transactions([make_purchase(amount=100)])

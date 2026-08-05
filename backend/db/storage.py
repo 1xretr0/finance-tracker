@@ -1,3 +1,6 @@
+# ---------------------------------------------------------------------------
+# SQLite storage layer for transaction data
+# ---------------------------------------------------------------------------
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -12,15 +15,9 @@ from backend.constants import (
     UPDATABLE_FIELDS
 )
 
-
-def _end_of_day(date_str: str) -> str:
-    """If date_str is date-only (YYYY-MM-DD), append T23:59:59 so that
-    '<=' comparisons include all timestamps within that day."""
-    if date_str and "T" not in date_str:
-        return date_str + "T23:59:59"
-    return date_str
-
-
+# ---------------------------------------------------------------------------
+# Database connection management
+# ---------------------------------------------------------------------------
 def get_connection() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -40,7 +37,19 @@ def _connection():
     finally:
         conn.close()
 
+# ---------------------------------------------------------------------------
+# Utility functions
+# ---------------------------------------------------------------------------
+def _end_of_day(date_str: str) -> str:
+    """If date_str is date-only (YYYY-MM-DD), append T23:59:59 so that
+    '<=' comparisons include all timestamps within that day."""
+    if date_str and "T" not in date_str:
+        return date_str + "T23:59:59"
+    return date_str
 
+# ---------------------------------------------------------------------------
+# Schema initialization
+# ---------------------------------------------------------------------------
 def init_db():
     with _connection() as conn:
         conn.execute("""
@@ -82,7 +91,9 @@ def init_db():
             )
         """)
 
-
+# ---------------------------------------------------------------------------
+# Transaction insert operations
+# ---------------------------------------------------------------------------
 def insert_transactions(transactions: list[dict]) -> int:
     """Inserts transactions, skipping duplicates. Returns count of new rows inserted."""
     with _connection() as conn:
@@ -124,7 +135,9 @@ def insert_transactions(transactions: list[dict]) -> int:
                 pass
         return inserted
 
-
+# ---------------------------------------------------------------------------
+# Transaction query operations
+# ---------------------------------------------------------------------------
 def get_transactions(
     bank: str | None = None,
     tx_type: str | None = None,
@@ -177,7 +190,9 @@ def get_summary(start_date: str | None = None, end_date: str | None = None) -> d
         rows = conn.execute(query, params).fetchall()
         return {row["type"]: {"count": row["count"], "total": row["total"]} for row in rows}
 
-
+# ---------------------------------------------------------------------------
+# Category management
+# ---------------------------------------------------------------------------
 def get_uncategorized() -> list[dict]:
     """Returns all transactions that have no category assigned."""
     with _connection() as conn:
@@ -218,6 +233,9 @@ def create_category(name: str) -> str:
             pass
         return name
 
+# ---------------------------------------------------------------------------
+# Transaction update & delete operations
+# ---------------------------------------------------------------------------
 def update_transaction(tx_id: int, fields: dict) -> bool:
     """Updates allowed fields for a transaction. Returns True if row was found."""
     to_update = {k: v for k, v in fields.items() if k in UPDATABLE_FIELDS}
@@ -240,7 +258,9 @@ def delete_transaction(tx_id: int) -> bool:
         result = conn.execute("DELETE FROM transactions WHERE id = ?", (tx_id,))
         return result.rowcount > 0
 
-
+# ---------------------------------------------------------------------------
+# Aggregation & reporting queries
+# ---------------------------------------------------------------------------
 def get_monthly_totals(
     start_date: str | None = None, end_date: str | None = None
 ) -> list[dict]:

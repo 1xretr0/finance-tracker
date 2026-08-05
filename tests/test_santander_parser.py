@@ -1,6 +1,11 @@
+# ---------------------------------------------------------------------------
+# Tests for Santander email parsers
+# ---------------------------------------------------------------------------
 from backend.banks.santander import parse_transaction
 
-
+# ---------------------------------------------------------------------------
+# Test data: Purchase emails (field-style)
+# ---------------------------------------------------------------------------
 PURCHASE_EMAIL = """\
 Te informamos que se autoriz=F3 una compra con tu tarjeta de cr=E9dito term=
 inaci=F3n: 8949.
@@ -15,6 +20,9 @@ Fecha y hora:
 15/06/2026 15:01:07 hrs
 """
 
+# ---------------------------------------------------------------------------
+# Test data: Purchase emails (narrative-style)
+# ---------------------------------------------------------------------------
 PURCHASE_NARRATIVE_EMAIL = """\
 Estimado Cliente:
 
@@ -31,35 +39,9 @@ Atentamente
 Santander M=E9xico
 """
 
-
-TRANSFER_EMAIL = """\
-ABONO v=EDa SPEI
-
-estimado cliente, recibiste v=EDa SPEI un abono por $96,863.53 MXN a tu cue=
-nta terminaci=F3n 1234
-
-Datos de la operaci=F3n
-
-Fecha: 12/06/2026
-Hora: 12:03 hrs
-Banco emisor: HSBC
-Cuenta origen:5678
-Clave de rastreo: HSBC628982
-Concepto de pago:NOMINAQ1126
-"""
-
-OUTGOING_TRANSFER_EMAIL = """\
-Notificaci=F3n Transferencia Interbancaria a trav=E9s de SuperM=F3vil.
-
-Apreciable JUAN PEREZ GARCIA
-
-Le informamos que recibimos su solicitud para realizar una transferencia, d=
-e su cuenta terminaci=F3n 1234, a la cuenta terminaci=F3n 9066 en BBVA MEXI=
-CO por un importe de $ 505.00 el 24/Mar/2025 a las 09:41, con la referencia=
- 7155691.
-"""
-
-
+# ---------------------------------------------------------------------------
+# Test suite: Purchase parser (field-style)
+# ---------------------------------------------------------------------------
 class TestPurchaseParser:
     def test_parses_amount(self):
         tx = parse_transaction(PURCHASE_EMAIL)
@@ -98,7 +80,9 @@ class TestPurchaseParser:
         tx = parse_transaction("Hello this is not a bank email")
         assert tx is None
 
-
+# ---------------------------------------------------------------------------
+# Test suite: Purchase parser (narrative-style)
+# ---------------------------------------------------------------------------
 class TestPurchaseNarrativeParser:
     def test_parses_amount(self):
         tx = parse_transaction(PURCHASE_NARRATIVE_EMAIL)
@@ -133,7 +117,9 @@ class TestPurchaseNarrativeParser:
         tx = parse_transaction(email)
         assert tx["amount"] == 1234.56
 
-
+# ---------------------------------------------------------------------------
+# Test data: Unique Points purchase emails
+# ---------------------------------------------------------------------------
 UNIQUE_POINTS_PURCHASE_EMAIL = """\
 Hola, Estimado Cliente.
 
@@ -148,7 +134,9 @@ de $1,999.00 M.N.
 115
 """
 
-
+# ---------------------------------------------------------------------------
+# Test suite: Unique Points purchase parser
+# ---------------------------------------------------------------------------
 class TestUniquePointsPurchaseParser:
     def test_parses_amount(self):
         tx = parse_transaction(UNIQUE_POINTS_PURCHASE_EMAIL)
@@ -183,7 +171,28 @@ class TestUniquePointsPurchaseParser:
         tx = parse_transaction(email)
         assert tx["amount"] == 12345.67
 
+# ---------------------------------------------------------------------------
+# Test data: Transfer emails (incoming)
+# ---------------------------------------------------------------------------
+TRANSFER_EMAIL = """\
+ABONO v=EDa SPEI
 
+estimado cliente, recibiste v=EDa SPEI un abono por $96,863.53 MXN a tu cue=
+nta terminaci=F3n 1234
+
+Datos de la operaci=F3n
+
+Fecha: 12/06/2026
+Hora: 12:03 hrs
+Banco emisor: HSBC
+Cuenta origen:5678
+Clave de rastreo: HSBC628982
+Concepto de pago:NOMINAQ1126
+"""
+
+# ---------------------------------------------------------------------------
+# Test suite: Incoming transfer parser
+# ---------------------------------------------------------------------------
 class TestTransferParser:
     def test_parses_amount(self):
         tx = parse_transaction(TRANSFER_EMAIL)
@@ -221,7 +230,23 @@ class TestTransferParser:
         tx = parse_transaction(TRANSFER_EMAIL)
         assert tx["bank"] == "santander"
 
+# ---------------------------------------------------------------------------
+# Test data: Transfer emails (outgoing - narrative style)
+# ---------------------------------------------------------------------------
+OUTGOING_TRANSFER_EMAIL = """\
+Notificaci=F3n Transferencia Interbancaria a trav=E9s de SuperM=F3vil.
 
+Apreciable JUAN PEREZ GARCIA
+
+Le informamos que recibimos su solicitud para realizar una transferencia, d=
+e su cuenta terminaci=F3n 1234, a la cuenta terminaci=F3n 9066 en BBVA MEXI=
+CO por un importe de $ 505.00 el 24/Mar/2025 a las 09:41, con la referencia=
+ 7155691.
+"""
+
+# ---------------------------------------------------------------------------
+# Test data: Outgoing transfers to ignored accounts
+# ---------------------------------------------------------------------------
 IGNORED_OUTGOING_TRANSFER_EMAIL = """\
 Notificaci=F3n Transferencia Interbancaria a trav=E9s de SuperM=F3vil.
 
@@ -233,7 +258,9 @@ ago W por un importe de $ 12000.00 el 16/Jun/2026 a las 22:59, con la refer=
 encia 4392728.
 """
 
-
+# ---------------------------------------------------------------------------
+# Test suite: Outgoing transfer parser (narrative-style)
+# ---------------------------------------------------------------------------
 class TestOutgoingTransferParser:
     def test_parses_amount(self):
         tx = parse_transaction(OUTGOING_TRANSFER_EMAIL)
@@ -289,7 +316,9 @@ n importe de $ 1500.00 el 10/Jun/2026 a las 11:00, con la referencia 9999999.
         tx = parse_transaction(email)
         assert tx["amount"] == 12500.00
 
-
+# ---------------------------------------------------------------------------
+# Test data: Incoming transfers from ignored accounts
+# ---------------------------------------------------------------------------
 IGNORED_INCOMING_TRANSFER_EMAIL = """\
 ABONO v=EDa SPEI
 
@@ -306,7 +335,9 @@ Clave de rastreo: MP123456
 Concepto de pago:REEMBOLSO
 """
 
-
+# ---------------------------------------------------------------------------
+# Test suite: Incoming transfer ignore list
+# ---------------------------------------------------------------------------
 class TestIncomingTransferIgnoreList:
     def test_ignores_transfer_from_mercado_pago_w(self):
         tx = parse_transaction(IGNORED_INCOMING_TRANSFER_EMAIL)
@@ -321,7 +352,9 @@ class TestIncomingTransferIgnoreList:
         assert tx is not None
         assert tx["type"] == "transfer"
 
-
+# ---------------------------------------------------------------------------
+# Test data: Outgoing transfer confirmation emails (field-style)
+# ---------------------------------------------------------------------------
 OUTGOING_TRANSFER_CONFIRMATION_EMAIL = """\
 Confirmaci=F3n de transferencia
 
@@ -336,7 +369,9 @@ Hora: 08:37 hrs
 Referencia: 6385529
 """
 
-
+# ---------------------------------------------------------------------------
+# Test suite: Outgoing transfer confirmation parser (field-style)
+# ---------------------------------------------------------------------------
 class TestOutgoingTransferConfirmationParser:
     def test_parses_amount(self):
         tx = parse_transaction(OUTGOING_TRANSFER_CONFIRMATION_EMAIL)

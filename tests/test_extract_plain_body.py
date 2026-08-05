@@ -1,11 +1,18 @@
+# ---------------------------------------------------------------------------
+# Tests for Gmail message body extraction (_extract_plain_body)
+# ---------------------------------------------------------------------------
 import base64
 from backend.banks.santander import _extract_plain_body
 
-
+# ---------------------------------------------------------------------------
+# Test utilities
+# ---------------------------------------------------------------------------
 def _encode(text: str) -> str:
     return base64.urlsafe_b64encode(text.encode("latin-1")).decode()
 
-
+# ---------------------------------------------------------------------------
+# Test suite
+# ---------------------------------------------------------------------------
 class TestExtractPlainBody:
     def test_simple_text_plain_payload(self):
         payload = {

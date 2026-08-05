@@ -1,3 +1,6 @@
+# ---------------------------------------------------------------------------
+# Flask API server & static file serving
+# ---------------------------------------------------------------------------
 import os
 from datetime import datetime
 
@@ -31,7 +34,9 @@ app = Flask(__name__, static_folder=None)
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
 HTML_DIR = os.path.join(FRONTEND_DIR, "html")
 
-
+# ---------------------------------------------------------------------------
+# Frontend page routes
+# ---------------------------------------------------------------------------
 @app.route("/")
 def index():
     return send_from_directory(HTML_DIR, "index.html")
@@ -50,6 +55,10 @@ def transactions_page():
 @app.route("/<path:filename>")
 def static_files(filename):
     return send_from_directory(FRONTEND_DIR, filename)
+
+# ---------------------------------------------------------------------------
+# API routes - Read operations
+# ---------------------------------------------------------------------------
 
 
 @app.route("/api/transactions")
@@ -189,7 +198,9 @@ def api_delete_transaction(tx_id):
 def api_categories():
     return jsonify(get_categories())
 
-
+# ---------------------------------------------------------------------------
+# API routes - Write operations
+# ---------------------------------------------------------------------------
 @app.route("/api/categories", methods=["POST"])
 def api_create_category():
     data = request.get_json()
@@ -198,7 +209,9 @@ def api_create_category():
     name = create_category(data["name"].strip())
     return jsonify({"name": name}), 201
 
-
+# ---------------------------------------------------------------------------
+# Application entry point
+# ---------------------------------------------------------------------------
 if __name__ == "__main__":
     init_db()
     app.run(debug=True, port=SERVER_PORT)

@@ -1,9 +1,14 @@
+# ---------------------------------------------------------------------------
+# Tests for Flask API server endpoints
+# ---------------------------------------------------------------------------
 import pytest
 from backend.server import app
 from backend.db.storage import init_db, insert_transactions
 import backend.db.storage as storage
 
-
+# ---------------------------------------------------------------------------
+# Test fixtures
+# ---------------------------------------------------------------------------
 @pytest.fixture(autouse=True)
 def use_temp_db(tmp_path, monkeypatch):
     db_path = str(tmp_path / "test.db")
@@ -18,7 +23,9 @@ def client():
     with app.test_client() as client:
         yield client
 
-
+# ---------------------------------------------------------------------------
+# Test data seeding
+# ---------------------------------------------------------------------------
 def seed_data():
     insert_transactions([
         {"bank": "santander", "type": "purchase", "amount": 100.0, "currency": "MXN", "date": "2026-03-10T10:00:00", "merchant": "OXXO"},
@@ -29,7 +36,9 @@ def seed_data():
         {"bank": "santander", "type": "outgoing_transfer", "amount": 5000.0, "currency": "MXN", "date": "2026-03-15T08:00:00", "account_last4": "6466", "dest_account_last4": "9066", "dest_bank": "BBVA", "reference": "123456"},
     ])
 
-
+# ---------------------------------------------------------------------------
+# Test suite: API endpoints - Read operations
+# ---------------------------------------------------------------------------
 class TestTransactionsEndpoint:
     def test_returns_all_transactions(self, client):
         seed_data()
@@ -146,7 +155,9 @@ class TestMerchantsEndpoint:
         assert data[0]["merchant"] == "OXXO"
         assert data[0]["total"] == 80.0
 
-
+# ---------------------------------------------------------------------------
+# Test suite: Static file serving
+# ---------------------------------------------------------------------------
 class TestSavingsEndpoint:
     def test_returns_savings_per_month(self, client):
         seed_data()
@@ -231,7 +242,9 @@ class TestBreakdownEndpoint:
         assert data["income"] == []
         assert data["expenses"] == []
 
-
+# ---------------------------------------------------------------------------
+# Test suite: API endpoints - Write operations
+# ---------------------------------------------------------------------------
 class TestUncategorizedEndpoint:
     def test_returns_uncategorized_transactions(self, client):
         seed_data()
