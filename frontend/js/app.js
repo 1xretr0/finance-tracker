@@ -1,7 +1,6 @@
-let savingsChart = null;
-let incomeChart = null;
-let expenseChart = null;
-
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
 const CHART_COLORS = [
     "#4ade80", "#60a5fa", "#f472b6", "#facc15", "#a78bfa",
     "#fb923c", "#34d399", "#f87171", "#38bdf8", "#c084fc",
@@ -12,8 +11,18 @@ const EXPENSE_COLORS = [
     "#e11d48", "#fb7185", "#dc2626", "#f43f5e", "#b91c1c",
 ];
 
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+let savingsChart = null;
+let incomeChart = null;
+let expenseChart = null;
 let savingsYear = new Date().getFullYear();
+let savingsData = [];
 
+// ---------------------------------------------------------------------------
+// Savings chart
+// ---------------------------------------------------------------------------
 async function loadSavingsChart() {
     document.getElementById("savings-year").textContent = savingsYear;
 
@@ -83,6 +92,9 @@ async function loadSavingsChart() {
     });
 }
 
+// ---------------------------------------------------------------------------
+// Breakdown charts (income/expense doughnuts)
+// ---------------------------------------------------------------------------
 async function loadBreakdownCharts(month) {
     let data;
     try {
@@ -153,14 +165,9 @@ async function loadBreakdownCharts(month) {
     });
 }
 
-function initBreakdownMonth() {
-    const input = document.getElementById("breakdown-month");
-    input.value = getCurrentMonthStr();
-    loadBreakdownCharts(input.value);
-}
-
-let savingsData = [];
-
+// ---------------------------------------------------------------------------
+// Quarterly savings overview
+// ---------------------------------------------------------------------------
 async function loadSavingsOverview(quarter) {
     const year = savingsYear;
 
@@ -205,6 +212,15 @@ async function loadSavingsOverview(quarter) {
             `;
         })
         .join("");
+}
+
+// ---------------------------------------------------------------------------
+// Event handlers & initialization
+// ---------------------------------------------------------------------------
+function initBreakdownMonth() {
+    const input = document.getElementById("breakdown-month");
+    input.value = getCurrentMonthStr();
+    loadBreakdownCharts(input.value);
 }
 
 function initQuarterFilter() {
@@ -274,6 +290,9 @@ function initDelegation() {
     });
 }
 
+// ---------------------------------------------------------------------------
+// Bootstrap
+// ---------------------------------------------------------------------------
 loadSavingsChart().then(() => {
     initBreakdownMonth();
     initQuarterFilter();

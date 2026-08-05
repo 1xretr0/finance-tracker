@@ -1,7 +1,13 @@
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
 let transactions = [];
 let currentIndex = 0;
 let categories = [];
 
+// ---------------------------------------------------------------------------
+// Data loading & rendering
+// ---------------------------------------------------------------------------
 async function init() {
     try {
         transactions = await fetchJSON("/api/uncategorized");
@@ -18,16 +24,6 @@ async function init() {
     populateCategoryList();
     updateCounter();
     showCurrent();
-}
-
-function populateCategoryList() {
-    const datalist = document.getElementById("category-list");
-    datalist.innerHTML = categories.map((c) => `<option value="${escapeHTML(c)}">`).join("");
-}
-
-function updateCounter() {
-    const remaining = transactions.length - currentIndex;
-    document.getElementById("counter").textContent = `${remaining} remaining`;
 }
 
 function showCurrent() {
@@ -72,6 +68,14 @@ function showCurrent() {
     `;
 
     input.focus();
+}
+
+// ---------------------------------------------------------------------------
+// Category management
+// ---------------------------------------------------------------------------
+function populateCategoryList() {
+    const datalist = document.getElementById("category-list");
+    datalist.innerHTML = categories.map((c) => `<option value="${escapeHTML(c)}">`).join("");
 }
 
 async function saveCategory() {
@@ -119,20 +123,37 @@ async function saveCategory() {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Navigation
+// ---------------------------------------------------------------------------
 function skip() {
     currentIndex++;
     updateCounter();
     showCurrent();
 }
 
-document.getElementById("save-btn").addEventListener("click", saveCategory);
-document.getElementById("skip-btn").addEventListener("click", skip);
+function updateCounter() {
+    const remaining = transactions.length - currentIndex;
+    document.getElementById("counter").textContent = `${remaining} remaining`;
+}
 
-document.getElementById("category-input").addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
-        e.preventDefault();
-        saveCategory();
-    }
-});
+// ---------------------------------------------------------------------------
+// Event handlers & initialization
+// ---------------------------------------------------------------------------
+function initEventHandlers() {
+    document.getElementById("save-btn").addEventListener("click", saveCategory);
+    document.getElementById("skip-btn").addEventListener("click", skip);
 
+    document.getElementById("category-input").addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            saveCategory();
+        }
+    });
+}
+
+// ---------------------------------------------------------------------------
+// Bootstrap
+// ---------------------------------------------------------------------------
+initEventHandlers();
 init();

@@ -1,3 +1,6 @@
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
 const TX_TYPE_PURCHASE = "purchase";
 const TX_TYPE_TRANSFER = "transfer";
 const TX_TYPE_OUTGOING_TRANSFER = "outgoing_transfer";
@@ -11,6 +14,9 @@ const QUARTER_MONTHS = {
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
+// ---------------------------------------------------------------------------
+// Utility functions
+// ---------------------------------------------------------------------------
 function escapeHTML(str) {
     const div = document.createElement("div");
     div.textContent = str;
@@ -25,6 +31,9 @@ async function fetchJSON(url) {
     return res.json();
 }
 
+// ---------------------------------------------------------------------------
+// Date & formatting helpers
+// ---------------------------------------------------------------------------
 function getCurrentQuarter() {
     return Math.floor(new Date().getMonth() / 3) + 1;
 }
@@ -53,6 +62,9 @@ function getMonthDateRange(monthStr) {
     };
 }
 
+// ---------------------------------------------------------------------------
+// UI helpers
+// ---------------------------------------------------------------------------
 function showToast(message, type = "info") {
     let container = document.getElementById("toast-container");
     if (!container) {
