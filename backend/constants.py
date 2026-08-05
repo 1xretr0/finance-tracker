@@ -60,3 +60,18 @@ IGNORED_ACCOUNT_TRANSFERS = [
     {"account_last4": "6184", "bank": "Mercado Pago W"},
     {"account_last4": "8275", "bank": "STP"},
 ]
+
+# Santander email parsing patterns
+# Dispatch guard signatures (case-insensitive except where noted)
+PATTERN_INCOMING_TRANSFER_UPPER = "ABONO"  # case-sensitive
+PATTERN_INCOMING_TRANSFER_SPEI = "SPEI"  # case-sensitive
+PATTERN_OUTGOING_TRANSFER_NARRATIVE = "transferencia interbancaria"
+PATTERN_OUTGOING_TRANSFER_CONFIRMATION = "confirmación de transferencia"
+PATTERN_OUTGOING_TRANSFER_CONFIRMATION_DETAILS = "detalles de la operación"
+PATTERN_PURCHASE_NARRATIVE = "una compra en el comercio"
+PATTERN_UNIQUE_POINTS_PURCHASE_AMOUNT = "por un monto"
+PATTERN_UNIQUE_POINTS_PURCHASE_CURRENCY = "m.n."
+
+# Common regex components
+PATTERN_ACCOUNT_TERMINATION = r"terminaci[oó]n"
+DEFAULT_TIME = "00:00:00"

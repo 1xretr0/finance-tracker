@@ -320,3 +320,77 @@ class TestIncomingTransferIgnoreList:
         tx = parse_transaction(email)
         assert tx is not None
         assert tx["type"] == "transfer"
+
+
+OUTGOING_TRANSFER_CONFIRMATION_EMAIL = """\
+Confirmaci=F3n de transferencia
+
+Estimado cliente, realizaste una transferencia de tu cuenta terminaci=F3n 6=
+466 a la cuenta terminaci=F3n 1306 en BBVA MEXICO.
+
+Detalles de la operaci=F3n
+
+Importe: $4,669.00 MXP
+Fecha: 05/08/2026
+Hora: 08:37 hrs
+Referencia: 6385529
+"""
+
+
+class TestOutgoingTransferConfirmationParser:
+    def test_parses_amount(self):
+        tx = parse_transaction(OUTGOING_TRANSFER_CONFIRMATION_EMAIL)
+        assert tx["amount"] == 4669.00
+
+    def test_parses_source_account(self):
+        tx = parse_transaction(OUTGOING_TRANSFER_CONFIRMATION_EMAIL)
+        assert tx["account_last4"] == "6466"
+
+    def test_parses_dest_account(self):
+        tx = parse_transaction(OUTGOING_TRANSFER_CONFIRMATION_EMAIL)
+        assert tx["dest_account_last4"] == "1306"
+
+    def test_parses_dest_bank(self):
+        tx = parse_transaction(OUTGOING_TRANSFER_CONFIRMATION_EMAIL)
+        assert tx["dest_bank"] == "BBVA MEXICO"
+
+    def test_parses_reference(self):
+        tx = parse_transaction(OUTGOING_TRANSFER_CONFIRMATION_EMAIL)
+        assert tx["reference"] == "6385529"
+
+    def test_parses_date(self):
+        tx = parse_transaction(OUTGOING_TRANSFER_CONFIRMATION_EMAIL)
+        assert tx["date"] == "2026-08-05T08:37:00"
+
+    def test_type_is_outgoing_transfer(self):
+        tx = parse_transaction(OUTGOING_TRANSFER_CONFIRMATION_EMAIL)
+        assert tx["type"] == "outgoing_transfer"
+
+    def test_bank_is_santander(self):
+        tx = parse_transaction(OUTGOING_TRANSFER_CONFIRMATION_EMAIL)
+        assert tx["bank"] == "santander"
+
+    def test_currency_is_mxn(self):
+        tx = parse_transaction(OUTGOING_TRANSFER_CONFIRMATION_EMAIL)
+        assert tx["currency"] == "MXN"
+
+    def test_amount_with_thousands(self):
+        email = OUTGOING_TRANSFER_CONFIRMATION_EMAIL.replace("$4,669.00", "$12,345.67")
+        tx = parse_transaction(email)
+        assert tx["amount"] == 12345.67
+
+    def test_ignores_transfer_to_mercado_pago_w(self):
+        email = OUTGOING_TRANSFER_CONFIRMATION_EMAIL.replace(
+            "terminaci=F3n 1306 en BBVA MEXICO",
+            "terminaci=F3n 6184 en Mercado Pago W"
+        )
+        tx = parse_transaction(email)
+        assert tx is None
+
+    def test_ignores_transfer_to_stp(self):
+        email = OUTGOING_TRANSFER_CONFIRMATION_EMAIL.replace(
+            "terminaci=F3n 1306 en BBVA MEXICO",
+            "terminaci=F3n 8275 en STP"
+        )
+        tx = parse_transaction(email)
+        assert tx is None

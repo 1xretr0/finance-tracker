@@ -27,6 +27,16 @@ from backend.constants import (
     DATE_FORMAT_TX,
     MONTHS_ES,
     IGNORED_ACCOUNT_TRANSFERS,
+    PATTERN_INCOMING_TRANSFER_UPPER,
+    PATTERN_INCOMING_TRANSFER_SPEI,
+    PATTERN_OUTGOING_TRANSFER_NARRATIVE,
+    PATTERN_OUTGOING_TRANSFER_CONFIRMATION,
+    PATTERN_OUTGOING_TRANSFER_CONFIRMATION_DETAILS,
+    PATTERN_PURCHASE_NARRATIVE,
+    PATTERN_UNIQUE_POINTS_PURCHASE_AMOUNT,
+    PATTERN_UNIQUE_POINTS_PURCHASE_CURRENCY,
+    PATTERN_ACCOUNT_TERMINATION,
+    DEFAULT_TIME,
 )
 
 logger = logging.getLogger(__name__)
@@ -131,19 +141,21 @@ def parse_transaction(plain_text: str) -> dict | None:
     except UnicodeDecodeError:
         decoded = raw.decode("latin-1")
 
-    if "ABONO" in decoded.upper() and "SPEI" in decoded.upper():
+    if PATTERN_INCOMING_TRANSFER_UPPER in decoded.upper() and PATTERN_INCOMING_TRANSFER_SPEI in decoded.upper():
         return _parse_incoming_transfer(decoded)
-    if "transferencia interbancaria" in decoded.lower():
+    if PATTERN_OUTGOING_TRANSFER_NARRATIVE in decoded.lower():
         return _parse_outgoing_transfer(decoded)
-    if "una compra en el comercio" in decoded.lower():
+    if PATTERN_OUTGOING_TRANSFER_CONFIRMATION in decoded.lower() and PATTERN_OUTGOING_TRANSFER_CONFIRMATION_DETAILS in decoded.lower():
+        return _parse_outgoing_transfer_confirmation(decoded)
+    if PATTERN_PURCHASE_NARRATIVE in decoded.lower():
         return _parse_purchase_narrative(decoded)
-    if "por un monto" in decoded.lower() and "m.n." in decoded.lower():
+    if PATTERN_UNIQUE_POINTS_PURCHASE_AMOUNT in decoded.lower() and PATTERN_UNIQUE_POINTS_PURCHASE_CURRENCY in decoded.lower():
         return _parse_unique_points_purchase(decoded)
     return _parse_purchase(decoded)
 
 
 def _parse_purchase(decoded: str) -> dict | None:
-    card_match = re.search(r"terminaci[oó]n:\s*(\d{4})", decoded)
+    card_match = re.search(rf"{PATTERN_ACCOUNT_TERMINATION}:\s*(\d{{4}})", decoded)
     amount_match = re.search(r"Monto:\s*\$([0-9,]+\.\d{2})\s*(MXN)?", decoded)
     merchant_match = re.search(r"Comercio:\s*(.+)", decoded)
     date_match = re.search(
@@ -170,8 +182,8 @@ def _parse_purchase(decoded: str) -> dict | None:
 
 def _parse_purchase_narrative(decoded: str) -> dict | None:
     """Parses the 'Pago/Compra con Tarjeta' narrative-style notification."""
-    merchant_match = re.search(r"una compra en el comercio\s+(.+)", decoded, re.IGNORECASE)
-    card_match = re.search(r"terminaci[oó]n\s*\*{0,2}(\d{4})", decoded)
+    merchant_match = re.search(rf"{PATTERN_PURCHASE_NARRATIVE}\s+(.+)", decoded, re.IGNORECASE)
+    card_match = re.search(rf"{PATTERN_ACCOUNT_TERMINATION}\s*\*{{0,2}}(\d{{4}})", decoded)
     amount_match = re.search(r"un monto de\s*\$([0-9,]+\.\d{2})\s*(MXN)?", decoded)
     date_match = re.search(r"El\s+(\d{2}/\d{2}/\d{4})", decoded)
     time_match = re.search(r"a las\s+(\d{2}:\d{2}:\d{2})\s*hrs", decoded)
@@ -180,7 +192,7 @@ def _parse_purchase_narrative(decoded: str) -> dict | None:
         return None
 
     amount_str = amount_match.group(1).replace(",", "")
-    time_str = time_match.group(1) if time_match else "00:00:00"
+    time_str = time_match.group(1) if time_match else DEFAULT_TIME
     date_str = f"{date_match.group(1)} {time_str}"
     tx_date = datetime.strptime(date_str, DATE_FORMAT_TX)
 
@@ -198,17 +210,17 @@ def _parse_purchase_narrative(decoded: str) -> dict | None:
 def _parse_unique_points_purchase(decoded: str) -> dict | None:
     """Parses the 'Unique Points' rewards-style purchase notification."""
     merchant_match = re.search(
-        r"una compra\s+en\s+(.+?)\s+por un monto", decoded, re.IGNORECASE | re.DOTALL
+        rf"una compra\s+en\s+(.+?)\s+{PATTERN_UNIQUE_POINTS_PURCHASE_AMOUNT}", decoded, re.IGNORECASE | re.DOTALL
     )
-    card_match = re.search(r"terminaci[oó]n\s*\*{0,2}(\d{4})", decoded)
-    amount_match = re.search(r"por un monto\s+de\s*\$([0-9,]+\.\d{2})", decoded)
+    card_match = re.search(rf"{PATTERN_ACCOUNT_TERMINATION}\s*\*{{0,2}}(\d{{4}})", decoded)
+    amount_match = re.search(rf"{PATTERN_UNIQUE_POINTS_PURCHASE_AMOUNT}\s+de\s*\$([0-9,]+\.\d{{2}})", decoded)
     date_match = re.search(r"(\d{2}/\d{2}/\d{4})", decoded)
 
     if not amount_match or not merchant_match or not date_match:
         return None
 
     amount_str = amount_match.group(1).replace(",", "")
-    date_str = f"{date_match.group(1)} 00:00:00"
+    date_str = f"{date_match.group(1)} {DEFAULT_TIME}"
     tx_date = datetime.strptime(date_str, DATE_FORMAT_TX)
 
     return {
@@ -227,7 +239,7 @@ def _parse_incoming_transfer(decoded: str) -> dict | None:
     :param decoded: decoded email content of the transaction
     :return: the dict of the parsed transfer transaction
     """
-    account_match = re.search(r"cuenta terminaci[oó]n\s*(\d{4})", decoded)
+    account_match = re.search(rf"cuenta {PATTERN_ACCOUNT_TERMINATION}\s*(\d{{4}})", decoded)
     amount_match = re.search(r"\$([0-9,]+\.\d{2})\s*(MXN)?", decoded)
     date_match = re.search(r"Fecha:\s*(\d{2}/\d{2}/\d{4})", decoded)
     time_match = re.search(r"Hora:\s*(\d{2}:\d{2})\s*hrs", decoded)
@@ -238,12 +250,12 @@ def _parse_incoming_transfer(decoded: str) -> dict | None:
 
     if not amount_match or not date_match:
         return None
-    
+
     if _is_internal_transfer(source_account_match, sender_bank_match):
         return None
 
     amount_str = amount_match.group(1).replace(",", "")
-    time_str = time_match.group(1) + ":00" if time_match else "00:00:00"
+    time_str = time_match.group(1) + ":00" if time_match else DEFAULT_TIME
     date_str = f"{date_match.group(1)} {time_str}"
     tx_date = datetime.strptime(date_str, DATE_FORMAT_TX)
 
@@ -281,7 +293,7 @@ def _parse_outgoing_transfer(decoded: str) -> dict | None:
     raw_date = date_match.group(1)
     day, month_str, year = raw_date.split("/")
     month = MONTHS_ES.get(month_str.lower(), "01")
-    time_str = time_match.group(1) + ":00" if time_match else "00:00:00"
+    time_str = time_match.group(1) + ":00" if time_match else DEFAULT_TIME
     tx_date = datetime.strptime(f"{day}/{month}/{year} {time_str}", DATE_FORMAT_TX)
 
     return {
@@ -289,6 +301,40 @@ def _parse_outgoing_transfer(decoded: str) -> dict | None:
         "account_last4": source_match.group(1) if source_match else None,
         "dest_account_last4": destination_account_digits.group(1) if destination_account_digits else None,
         "dest_bank": destination_bank_name.group(1).strip() if destination_bank_name else None,
+        "amount": float(amount_str),
+        "currency": CURRENCY_MXN,
+        "reference": reference_match.group(1) if reference_match else None,
+        "date": tx_date.isoformat(),
+        "type": TX_TYPE_OUTGOING_TRANSFER,
+    }
+
+
+def _parse_outgoing_transfer_confirmation(decoded: str) -> dict | None:
+    """Parses the 'Confirmación de transferencia' structured field-style notification."""
+    source_match = re.search(rf"de tu cuenta {PATTERN_ACCOUNT_TERMINATION}\s*(\d{{4}})", decoded)
+    dest_account_match = re.search(rf"a la cuenta {PATTERN_ACCOUNT_TERMINATION}\s*(\d{{4}})", decoded)
+    dest_bank_match = re.search(rf"a la cuenta {PATTERN_ACCOUNT_TERMINATION}\s*\d{{4}}\s+en\s+(.+?)\.", decoded)
+    amount_match = re.search(r"Importe:\s*\$([0-9,]+\.\d{2})", decoded)
+    date_match = re.search(r"Fecha:\s*(\d{2}/\d{2}/\d{4})", decoded)
+    time_match = re.search(r"Hora:\s*(\d{2}:\d{2})\s*hrs", decoded)
+    reference_match = re.search(r"Referencia:\s*(\d+)", decoded)
+
+    if not amount_match or not date_match or not source_match or not dest_account_match:
+        return None
+
+    if _is_internal_transfer(dest_account_match, dest_bank_match):
+        return None
+
+    amount_str = amount_match.group(1).replace(",", "")
+    time_str = time_match.group(1) + ":00" if time_match else DEFAULT_TIME
+    date_str = f"{date_match.group(1)} {time_str}"
+    tx_date = datetime.strptime(date_str, DATE_FORMAT_TX)
+
+    return {
+        "bank": BANK_SANTANDER,
+        "account_last4": source_match.group(1),
+        "dest_account_last4": dest_account_match.group(1),
+        "dest_bank": dest_bank_match.group(1).strip() if dest_bank_match else None,
         "amount": float(amount_str),
         "currency": CURRENCY_MXN,
         "reference": reference_match.group(1) if reference_match else None,
