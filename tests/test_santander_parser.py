@@ -7,8 +7,7 @@ from backend.banks.santander import parse_transaction
 # Test data: Purchase emails (field-style)
 # ---------------------------------------------------------------------------
 PURCHASE_EMAIL = """\
-Te informamos que se autoriz=F3 una compra con tu tarjeta de cr=E9dito term=
-inaci=F3n: 8949.
+Te informamos que se autorizó una compra con tu tarjeta de crédito terminación: 8949.
 
 Monto:
 $618.20 MXN
@@ -29,14 +28,14 @@ Estimado Cliente:
 Te informamos que se ha realizado
 una compra en el comercio UBR* PENDING.UBER.COM
 con tu tarjeta de TDC
-terminaci=F3n **8949, por
+terminación **8949, por
 un monto de $74.63 MXN.
 
 El 18/06/2026
 a las 23:27:57 hrs.
 
 Atentamente
-Santander M=E9xico
+Santander México
 """
 
 # ---------------------------------------------------------------------------
@@ -125,9 +124,9 @@ Hola, Estimado Cliente.
 
 03/08/2026.
 
-Realizaste una compra con tu Tarjeta cr=E9dito terminaci=F3n 5788
+Realizaste una compra con tu Tarjeta crédito terminación 5788
 
-Te informamos que se autoriz=F3 una compra
+Te informamos que se autorizó una compra
 en WL *STEAM PURCHASE por un monto
 de $1,999.00 M.N.
 
@@ -175,12 +174,11 @@ class TestUniquePointsPurchaseParser:
 # Test data: Transfer emails (incoming)
 # ---------------------------------------------------------------------------
 TRANSFER_EMAIL = """\
-ABONO v=EDa SPEI
+ABONO vía SPEI
 
-estimado cliente, recibiste v=EDa SPEI un abono por $96,863.53 MXN a tu cue=
-nta terminaci=F3n 1234
+estimado cliente, recibiste vía SPEI un abono por $96,863.53 MXN a tu cuenta terminación 1234
 
-Datos de la operaci=F3n
+Datos de la operación
 
 Fecha: 12/06/2026
 Hora: 12:03 hrs
@@ -234,28 +232,22 @@ class TestTransferParser:
 # Test data: Transfer emails (outgoing - narrative style)
 # ---------------------------------------------------------------------------
 OUTGOING_TRANSFER_EMAIL = """\
-Notificaci=F3n Transferencia Interbancaria a trav=E9s de SuperM=F3vil.
+Notificación Transferencia Interbancaria a través de SuperMóvil.
 
 Apreciable JUAN PEREZ GARCIA
 
-Le informamos que recibimos su solicitud para realizar una transferencia, d=
-e su cuenta terminaci=F3n 1234, a la cuenta terminaci=F3n 9066 en BBVA MEXI=
-CO por un importe de $ 505.00 el 24/Mar/2025 a las 09:41, con la referencia=
- 7155691.
+Le informamos que recibimos su solicitud para realizar una transferencia, de su cuenta terminación 1234, a la cuenta terminación 9066 en BBVA MEXICO por un importe de $ 505.00 el 24/Mar/2025 a las 09:41, con la referencia 7155691.
 """
 
 # ---------------------------------------------------------------------------
 # Test data: Outgoing transfers to ignored accounts
 # ---------------------------------------------------------------------------
 IGNORED_OUTGOING_TRANSFER_EMAIL = """\
-Notificaci=F3n Transferencia Interbancaria a trav=E9s de SuperM=F3vil.
+Notificación Transferencia Interbancaria a través de SuperMóvil.
 
 Apreciable JUAN PEREZ GARCIA
 
-Le informamos que recibimos su solicitud para realizar una transferencia, d=
-e su cuenta terminaci=F3n 1234, a la cuenta terminaci=F3n 6184 en Mercado P=
-ago W por un importe de $ 12000.00 el 16/Jun/2026 a las 22:59, con la refer=
-encia 4392728.
+Le informamos que recibimos su solicitud para realizar una transferencia, de su cuenta terminación 1234, a la cuenta terminación 6184 en Mercado Pago W por un importe de $ 12000.00 el 16/Jun/2026 a las 22:59, con la referencia 4392728.
 """
 
 # ---------------------------------------------------------------------------
@@ -300,13 +292,11 @@ class TestOutgoingTransferParser:
 
     def test_ignores_transfer_to_stp(self):
         email = """\
-Notificaci=F3n Transferencia Interbancaria a trav=E9s de SuperM=F3vil.
+Notificación Transferencia Interbancaria a través de SuperMóvil.
 
 Apreciable JUAN PEREZ GARCIA
 
-Le informamos que recibimos su solicitud para realizar una transferencia, d=
-e su cuenta terminaci=F3n 1234, a la cuenta terminaci=F3n 8275 en STP por u=
-n importe de $ 1500.00 el 10/Jun/2026 a las 11:00, con la referencia 9999999.
+Le informamos que recibimos su solicitud para realizar una transferencia, de su cuenta terminación 1234, a la cuenta terminación 8275 en STP por un importe de $ 1500.00 el 10/Jun/2026 a las 11:00, con la referencia 9999999.
 """
         tx = parse_transaction(email)
         assert tx is None
@@ -320,12 +310,11 @@ n importe de $ 1500.00 el 10/Jun/2026 a las 11:00, con la referencia 9999999.
 # Test data: Incoming transfers from ignored accounts
 # ---------------------------------------------------------------------------
 IGNORED_INCOMING_TRANSFER_EMAIL = """\
-ABONO v=EDa SPEI
+ABONO vía SPEI
 
-estimado cliente, recibiste v=EDa SPEI un abono por $1,000.00 MXN a tu cue=
-nta terminaci=F3n 1234
+estimado cliente, recibiste vía SPEI un abono por $1,000.00 MXN a tu cuenta terminación 1234
 
-Datos de la operaci=F3n
+Datos de la operación
 
 Fecha: 15/06/2026
 Hora: 10:00 hrs
@@ -356,12 +345,11 @@ class TestIncomingTransferIgnoreList:
 # Test data: Outgoing transfer confirmation emails (field-style)
 # ---------------------------------------------------------------------------
 OUTGOING_TRANSFER_CONFIRMATION_EMAIL = """\
-Confirmaci=F3n de transferencia
+Confirmación de transferencia
 
-Estimado cliente, realizaste una transferencia de tu cuenta terminaci=F3n 6=
-466 a la cuenta terminaci=F3n 1306 en BBVA MEXICO.
+Estimado cliente, realizaste una transferencia de tu cuenta terminación 6466 a la cuenta terminación 1306 en BBVA MEXICO.
 
-Detalles de la operaci=F3n
+Detalles de la operación
 
 Importe: $4,669.00 MXP
 Fecha: 05/08/2026
@@ -416,16 +404,16 @@ class TestOutgoingTransferConfirmationParser:
 
     def test_ignores_transfer_to_mercado_pago_w(self):
         email = OUTGOING_TRANSFER_CONFIRMATION_EMAIL.replace(
-            "terminaci=F3n 1306 en BBVA MEXICO",
-            "terminaci=F3n 6184 en Mercado Pago W"
+            "terminación 1306 en BBVA MEXICO",
+            "terminación 6184 en Mercado Pago W"
         )
         tx = parse_transaction(email)
         assert tx is None
 
     def test_ignores_transfer_to_stp(self):
         email = OUTGOING_TRANSFER_CONFIRMATION_EMAIL.replace(
-            "terminaci=F3n 1306 en BBVA MEXICO",
-            "terminaci=F3n 8275 en STP"
+            "terminación 1306 en BBVA MEXICO",
+            "terminación 8275 en STP"
         )
         tx = parse_transaction(email)
         assert tx is None

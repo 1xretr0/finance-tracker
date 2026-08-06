@@ -8,7 +8,7 @@ from backend.banks.santander import _extract_plain_body
 # Test utilities
 # ---------------------------------------------------------------------------
 def _encode(text: str) -> str:
-    return base64.urlsafe_b64encode(text.encode("latin-1")).decode()
+    return base64.urlsafe_b64encode(text.encode("utf-8")).decode()
 
 # ---------------------------------------------------------------------------
 # Test suite
