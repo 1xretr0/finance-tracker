@@ -81,11 +81,8 @@ IGNORED_ACCOUNT_TRANSFERS = [
 # ---------------------------------------------------------------------------
 # Dispatch guard signatures (case-insensitive)
 PATTERN_INCOMING_TRANSFER_UPPER = "spei un abono por"
-PATTERN_INCOMING_TRANSFER_SPEI = "spei"
-PATTERN_OUTGOING_TRANSFER_NARRATIVE = "transferencia interbancaria"
-PATTERN_OUTGOING_TRANSFER_CONFIRMATION = "de transferencia"
-PATTERN_OUTGOING_TRANSFER_CONFIRMATION_DETAILS = "estimado cliente, realizaste una transferencia de tu cuenta"
-PATTERN_PURCHASE_SUBJECT = 'pago/compra con Tarjeta Santander'
+PATTERN_OUTGOING_TRANSFER_NARRATIVE = "le informamos que recibimos su solicitud para realizar una transferencia"
+PATTERN_OUTGOING_TRANSFER_CONFIRMATION = "confirmación de transferencia"
 PATTERN_PURCHASE_NARRATIVE = "una compra en el comercio"
 PATTERN_UNIQUE_POINTS_PURCHASE_AMOUNT = "por un monto"
 PATTERN_UNIQUE_POINTS_PURCHASE_CURRENCY = "m.n."

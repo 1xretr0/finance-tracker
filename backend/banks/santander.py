@@ -32,8 +32,6 @@ from backend.constants import (
 	PATTERN_INCOMING_TRANSFER_UPPER,
 	PATTERN_OUTGOING_TRANSFER_NARRATIVE,
 	PATTERN_OUTGOING_TRANSFER_CONFIRMATION,
-	PATTERN_OUTGOING_TRANSFER_CONFIRMATION_DETAILS,
-	PATTERN_PURCHASE_SUBJECT,
 	PATTERN_PURCHASE_NARRATIVE,
 	PATTERN_UNIQUE_POINTS_PURCHASE_AMOUNT,
 	PATTERN_UNIQUE_POINTS_PURCHASE_CURRENCY,
@@ -146,19 +144,21 @@ def _authenticate():
 # ---------------------------------------------------------------------------
 def parse_transaction(plain_text: str) -> dict | None:
 	"""Parses a Santander notification plain text body into transaction data."""
-	if PATTERN_INCOMING_TRANSFER_UPPER in plain_text.lower():
+	lowered_plain_text = plain_text.lower()
+
+	if PATTERN_INCOMING_TRANSFER_UPPER in lowered_plain_text:
 		return _parse_incoming_transfer(plain_text)
 
-	if PATTERN_OUTGOING_TRANSFER_NARRATIVE in plain_text.lower():
+	if PATTERN_OUTGOING_TRANSFER_NARRATIVE in lowered_plain_text:
 		return _parse_outgoing_transfer(plain_text)
 
-	if PATTERN_OUTGOING_TRANSFER_CONFIRMATION_DETAILS in plain_text.lower():
+	if PATTERN_OUTGOING_TRANSFER_CONFIRMATION in lowered_plain_text:
 		return _parse_outgoing_transfer_confirmation(plain_text)
 
-	if PATTERN_PURCHASE_NARRATIVE in plain_text.lower():
+	if PATTERN_PURCHASE_NARRATIVE in lowered_plain_text:
 		return _parse_purchase_narrative(plain_text)
 
-	if PATTERN_UNIQUE_POINTS_PURCHASE_AMOUNT in plain_text.lower() and PATTERN_UNIQUE_POINTS_PURCHASE_CURRENCY in plain_text.lower():
+	if PATTERN_UNIQUE_POINTS_PURCHASE_AMOUNT in lowered_plain_text and PATTERN_UNIQUE_POINTS_PURCHASE_CURRENCY in lowered_plain_text:
 		return _parse_unique_points_purchase(plain_text)
 
 	return _parse_purchase(plain_text)
