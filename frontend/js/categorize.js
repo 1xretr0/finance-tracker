@@ -89,7 +89,7 @@ async function saveCategory() {
 
     try {
         if (!categories.some((c) => c.toUpperCase() === categoryName)) {
-            const createRes = await fetch("/api/categories", {
+            const createRes = await apiFetch("/api/categories", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ name: categoryName }),
@@ -103,7 +103,7 @@ async function saveCategory() {
             populateCategoryList();
         }
 
-        const res = await fetch("/api/transactions/categorize", {
+        const res = await apiFetch("/api/transactions/categorize", {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify([{ id: tx.id, category: categoryName }]),

@@ -5,6 +5,9 @@ import pytest
 from backend.server import app
 from backend.db.storage import init_db, insert_transactions
 import backend.db.storage as storage
+import backend.server as server
+
+TEST_API_TOKEN = "test-token"
 
 # ---------------------------------------------------------------------------
 # Test fixtures
@@ -17,10 +20,17 @@ def use_temp_db(tmp_path, monkeypatch):
     yield
 
 
+@pytest.fixture(autouse=True)
+def use_test_api_token(monkeypatch):
+    monkeypatch.setattr(server, "API_TOKEN", TEST_API_TOKEN)
+    yield
+
+
 @pytest.fixture()
 def client():
     app.config["TESTING"] = True
     with app.test_client() as client:
+        client.environ_base["HTTP_AUTHORIZATION"] = f"Bearer {TEST_API_TOKEN}"
         yield client
 
 # ---------------------------------------------------------------------------
@@ -35,6 +45,36 @@ def seed_data():
         {"bank": "santander", "type": "transfer", "amount": 30000.0, "currency": "MXN", "date": "2026-04-01T12:00:00", "account_last4": "6466", "sender_bank": "HSBC", "tracking_key": "HSBC222"},
         {"bank": "santander", "type": "outgoing_transfer", "amount": 5000.0, "currency": "MXN", "date": "2026-03-15T08:00:00", "account_last4": "6466", "dest_account_last4": "9066", "dest_bank": "BBVA", "reference": "123456"},
     ])
+
+# ---------------------------------------------------------------------------
+# Test suite: Auth
+# ---------------------------------------------------------------------------
+class TestApiAuth:
+    def test_rejects_missing_token(self):
+        with app.test_client() as unauth_client:
+            res = unauth_client.get("/api/transactions")
+            assert res.status_code == 401
+
+    def test_rejects_wrong_token(self):
+        with app.test_client() as unauth_client:
+            unauth_client.environ_base["HTTP_AUTHORIZATION"] = "Bearer wrong"
+            res = unauth_client.get("/api/transactions")
+            assert res.status_code == 401
+
+    def test_accepts_correct_token(self, client):
+        res = client.get("/api/transactions")
+        assert res.status_code == 200
+
+    def test_static_routes_do_not_require_token(self):
+        with app.test_client() as unauth_client:
+            assert unauth_client.get("/").status_code == 200
+
+    def test_unconfigured_token_rejects_all_api_requests(self, monkeypatch):
+        monkeypatch.setattr(server, "API_TOKEN", None)
+        with app.test_client() as unauth_client:
+            unauth_client.environ_base["HTTP_AUTHORIZATION"] = f"Bearer {TEST_API_TOKEN}"
+            res = unauth_client.get("/api/transactions")
+            assert res.status_code == 503
 
 # ---------------------------------------------------------------------------
 # Test suite: API endpoints - Read operations

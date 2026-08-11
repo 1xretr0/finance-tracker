@@ -390,7 +390,7 @@ async function saveRow(row) {
     }
 
     try {
-        const res = await fetch(`/api/transactions/${id}`, {
+        const res = await apiFetch(`/api/transactions/${id}`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
@@ -423,7 +423,7 @@ async function saveRow(row) {
 async function deleteRow(row) {
     const id = row.dataset.id;
     try {
-        const res = await fetch(`/api/transactions/${id}`, {
+        const res = await apiFetch(`/api/transactions/${id}`, {
             method: "DELETE",
         });
         if (res.ok) {
@@ -601,7 +601,7 @@ async function submitNewTx(e) {
 
     try {
         if (payload.category && !categories.some((c) => c.toUpperCase() === payload.category)) {
-            await fetch("/api/categories", {
+            await apiFetch("/api/categories", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ name: payload.category }),
@@ -609,7 +609,7 @@ async function submitNewTx(e) {
             categories.push(payload.category);
         }
 
-        const res = await fetch("/api/transactions", {
+        const res = await apiFetch("/api/transactions", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),

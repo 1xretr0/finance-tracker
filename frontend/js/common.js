@@ -23,8 +23,34 @@ function escapeHTML(str) {
     return div.innerHTML;
 }
 
+// ---------------------------------------------------------------------------
+// API auth helper
+// ---------------------------------------------------------------------------
+// The hosted server requires a shared-secret bearer token on every /api/*
+// request. The token is kept in localStorage and attached to every API call
+// via apiFetch(); on a 401 it's cleared and the user is re-prompted.
+const API_TOKEN_STORAGE_KEY = "financeTrackerApiToken";
+
+function getApiToken() {
+    let token = localStorage.getItem(API_TOKEN_STORAGE_KEY);
+    if (!token) {
+        token = prompt("Enter API token:") || "";
+        if (token) localStorage.setItem(API_TOKEN_STORAGE_KEY, token);
+    }
+    return token;
+}
+
+async function apiFetch(url, options = {}) {
+    const headers = { ...(options.headers || {}), Authorization: `Bearer ${getApiToken()}` };
+    const res = await fetch(url, { ...options, headers });
+    if (res.status === 401) {
+        localStorage.removeItem(API_TOKEN_STORAGE_KEY);
+    }
+    return res;
+}
+
 async function fetchJSON(url) {
-    const res = await fetch(url);
+    const res = await apiFetch(url);
     if (!res.ok) {
         throw new Error(`Request failed: ${res.status} ${res.statusText}`);
     }

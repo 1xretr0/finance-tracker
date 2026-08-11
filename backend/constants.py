@@ -38,7 +38,20 @@ SANTANDER_LAST_RUN_FILE = os.path.join(
     os.path.dirname(__file__), "banks", "santander_last_run.txt"
 )
 DB_FILENAME = "finance_tracker.db"
-DB_PATH = os.path.join(os.path.dirname(__file__), "db", DB_FILENAME)
+_DEFAULT_DB_PATH = os.path.join(os.path.dirname(__file__), "db", DB_FILENAME)
+DB_PATH = os.environ.get("DB_PATH", _DEFAULT_DB_PATH)
+
+# ---------------------------------------------------------------------------
+# Hosting / remote API configuration
+# ---------------------------------------------------------------------------
+# API_TOKEN: shared secret required on every /api/* request once the server is
+# publicly hosted. Unset locally by default (auth is disabled for local dev).
+API_TOKEN = os.environ.get("API_TOKEN")
+
+# REMOTE_API_URL: when set on the machine running process_transactions, newly
+# fetched transactions are pushed to this hosted API instead of being written
+# to a local DB directly.
+REMOTE_API_URL = os.environ.get("REMOTE_API_URL")
 
 # ---------------------------------------------------------------------------
 # Date & time formats

@@ -27,12 +27,30 @@ from backend.constants import (
     TX_TYPE_TRANSFER,
     TX_TYPE_OUTGOING_TRANSFER,
     SERVER_PORT,
+    API_TOKEN,
 )
 
 app = Flask(__name__, static_folder=None)
 
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
 HTML_DIR = os.path.join(FRONTEND_DIR, "html")
+
+# ---------------------------------------------------------------------------
+# Auth: shared-secret bearer token on all /api/* routes.
+# Page/static routes stay open — they serve static shells with no data.
+# If API_TOKEN is unset, /api/* is rejected entirely (fail closed) so the
+# server never accidentally runs open once it's reachable publicly.
+# ---------------------------------------------------------------------------
+@app.before_request
+def require_api_token():
+    if not request.path.startswith("/api/"):
+        return None
+    if not API_TOKEN:
+        return jsonify({"error": "Server auth is not configured"}), 503
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header != f"Bearer {API_TOKEN}":
+        return jsonify({"error": "Unauthorized"}), 401
+    return None
 
 # ---------------------------------------------------------------------------
 # Frontend page routes
