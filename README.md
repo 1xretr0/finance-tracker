@@ -5,8 +5,8 @@ Personal finance tracker that aggregates transaction data from multiple bank sou
 ## How it works
 
 1. Bank notification emails arrive in Gmail and are auto-labeled
-2. `process_transactions` fetches new emails since the last run, parses transaction data, and stores it in SQLite
-3. A Flask server exposes a JSON API and serves a dark-mode dashboard with Chart.js visualizations
+2. `process_transactions` fetches new emails since the last run, parses transaction data, and either stores it in local SQLite or pushes it to a hosted API (see [Hosting & auth](#hosting--auth))
+3. A Flask server exposes a JSON API and serves a dark-mode dashboard with Chart.js visualizations. All `/api/*` routes require a bearer token
 
 ## Supported banks
 
@@ -52,6 +52,25 @@ python -m backend.process_transactions
 ```
 
 On first run, a browser window will open for OAuth consent. The token is saved to `token.json` for subsequent runs.
+
+## Hosting & auth
+
+The server and its SQLite DB can be deployed to a public host (e.g. PythonAnywhere) so `/api/transactions` is reachable from outside `localhost` — for example, so a phone can create transactions directly. Gmail ingestion keeps running locally (it needs the Google OAuth files, which never leave your machine) and pushes parsed transactions to the hosted API instead of writing to a local DB.
+
+All configuration is via environment variables (`backend/constants.py`):
+
+| Variable | Where set | Purpose |
+|---|---|---|
+| `API_TOKEN` | Host + local machine | Shared secret required as `Authorization: Bearer <token>` on every `/api/*` request, compared with a constant-time check. If unset on the server, all `/api/*` requests are rejected with `503` (fails closed, never runs open). |
+| `DB_PATH` | Host | Overrides the default `backend/db/finance_tracker.db` location, e.g. a persistent dir outside the deployed code. |
+| `REMOTE_API_URL` | Local machine | When set, `process_transactions` POSTs fetched transactions to `<REMOTE_API_URL>/api/transactions` with the bearer token instead of writing to a local DB. Duplicates (`409`) are skipped, same as local dedup. |
+| `FLASK_DEBUG` | Host + local machine | Set to `true` to enable Flask's reloader and interactive debugger. Defaults to off — must stay off on any publicly reachable host, since the debugger allows remote code execution if triggered. |
+
+To deploy only `backend/server.py`, `backend/db/storage.py`, `backend/constants.py`, and `frontend/` — the ingestion script and Google credentials stay local and are never uploaded.
+
+The dashboard prompts for the API token on first load and stores it in `localStorage`; it's cleared automatically if a request comes back `401`.
+
+Repeated failed-auth attempts are throttled per source IP: after 10 failures within a 5-minute window, that IP gets `429` on every `/api/*` request (token or not) until the window rolls off. This state is in-memory and resets on restart. If you put the server behind a reverse proxy, make sure it forwards the real client IP — otherwise every client behind the proxy shares one lockout bucket.
 
 ## Usage
 
@@ -108,7 +127,7 @@ finance-tracker/
 
 ## API
 
-The Flask server exposes a JSON API used by the dashboard frontend. All endpoints are under `/api/`.
+The Flask server exposes a JSON API used by the dashboard frontend. All endpoints are under `/api/` and require `Authorization: Bearer <API_TOKEN>` (see [Hosting & auth](#hosting--auth)). Page and static routes (`/`, `/categorize`, `/transactions`, CSS/JS) are not gated.
 
 **Transactions** — `GET /api/transactions` returns all transactions with optional filters (`bank`, `type`, `start_date`, `end_date`, `person`). You can also create (`POST`), update (`PUT /<id>`), and delete (`DELETE /<id>`) transactions manually — useful for entries that didn't come from a bank email.
 

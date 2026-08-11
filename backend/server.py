@@ -1,7 +1,10 @@
 # ---------------------------------------------------------------------------
 # Flask API server & static file serving
 # ---------------------------------------------------------------------------
+import hmac
 import os
+import time
+from collections import defaultdict, deque
 from datetime import datetime
 
 from flask import Flask, jsonify, request, send_from_directory
@@ -28,6 +31,9 @@ from backend.constants import (
     TX_TYPE_OUTGOING_TRANSFER,
     SERVER_PORT,
     API_TOKEN,
+    AUTH_MAX_FAILED_ATTEMPTS,
+    AUTH_LOCKOUT_WINDOW_SECONDS,
+    FLASK_DEBUG,
 )
 
 app = Flask(__name__, static_folder=None)
@@ -40,15 +46,42 @@ HTML_DIR = os.path.join(FRONTEND_DIR, "html")
 # Page/static routes stay open — they serve static shells with no data.
 # If API_TOKEN is unset, /api/* is rejected entirely (fail closed) so the
 # server never accidentally runs open once it's reachable publicly.
+#
+# Failed attempts are throttled per source IP: once an IP racks up
+# AUTH_MAX_FAILED_ATTEMPTS failures inside AUTH_LOCKOUT_WINDOW_SECONDS,
+# further attempts get 429 without even checking the token, until old
+# failures fall out of the window. In-memory only — fine for a
+# single-process personal deployment; resets on restart.
 # ---------------------------------------------------------------------------
+_failed_attempts = defaultdict(deque)
+
+
+def _is_locked_out(ip: str) -> bool:
+    attempts = _failed_attempts[ip]
+    cutoff = time.monotonic() - AUTH_LOCKOUT_WINDOW_SECONDS
+    while attempts and attempts[0] < cutoff:
+        attempts.popleft()
+    return len(attempts) >= AUTH_MAX_FAILED_ATTEMPTS
+
+
+def _record_failed_attempt(ip: str) -> None:
+    _failed_attempts[ip].append(time.monotonic())
+
+
 @app.before_request
 def require_api_token():
     if not request.path.startswith("/api/"):
         return None
     if not API_TOKEN:
         return jsonify({"error": "Server auth is not configured"}), 503
+
+    ip = request.remote_addr or "unknown"
+    if _is_locked_out(ip):
+        return jsonify({"error": "Too many failed attempts, try again later"}), 429
+
     auth_header = request.headers.get("Authorization", "")
-    if auth_header != f"Bearer {API_TOKEN}":
+    if not hmac.compare_digest(auth_header, f"Bearer {API_TOKEN}"):
+        _record_failed_attempt(ip)
         return jsonify({"error": "Unauthorized"}), 401
     return None
 
@@ -232,4 +265,4 @@ def api_create_category():
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     init_db()
-    app.run(debug=True, port=SERVER_PORT)
+    app.run(debug=FLASK_DEBUG, port=SERVER_PORT)

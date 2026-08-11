@@ -1,11 +1,14 @@
 # ---------------------------------------------------------------------------
 # Tests for Flask API server endpoints
 # ---------------------------------------------------------------------------
+import importlib
+
 import pytest
 from backend.server import app
 from backend.db.storage import init_db, insert_transactions
 import backend.db.storage as storage
 import backend.server as server
+import backend.constants as constants
 
 TEST_API_TOKEN = "test-token"
 
@@ -23,6 +26,12 @@ def use_temp_db(tmp_path, monkeypatch):
 @pytest.fixture(autouse=True)
 def use_test_api_token(monkeypatch):
     monkeypatch.setattr(server, "API_TOKEN", TEST_API_TOKEN)
+    yield
+
+
+@pytest.fixture(autouse=True)
+def reset_auth_lockout():
+    server._failed_attempts.clear()
     yield
 
 
@@ -75,6 +84,49 @@ class TestApiAuth:
             unauth_client.environ_base["HTTP_AUTHORIZATION"] = f"Bearer {TEST_API_TOKEN}"
             res = unauth_client.get("/api/transactions")
             assert res.status_code == 503
+
+    def test_locks_out_after_repeated_failed_attempts(self, monkeypatch):
+        monkeypatch.setattr(server, "AUTH_MAX_FAILED_ATTEMPTS", 3)
+        server._failed_attempts.clear()
+        with app.test_client() as unauth_client:
+            unauth_client.environ_base["HTTP_AUTHORIZATION"] = "Bearer wrong"
+            for _ in range(3):
+                res = unauth_client.get("/api/transactions")
+                assert res.status_code == 401
+
+            res = unauth_client.get("/api/transactions")
+            assert res.status_code == 429
+
+            unauth_client.environ_base["HTTP_AUTHORIZATION"] = f"Bearer {TEST_API_TOKEN}"
+            res = unauth_client.get("/api/transactions")
+            assert res.status_code == 429
+
+    def test_lockout_is_scoped_per_ip(self, monkeypatch):
+        monkeypatch.setattr(server, "AUTH_MAX_FAILED_ATTEMPTS", 3)
+        server._failed_attempts.clear()
+        with app.test_client() as client_a, app.test_client() as client_b:
+            client_a.environ_base["HTTP_AUTHORIZATION"] = "Bearer wrong"
+            client_a.environ_base["REMOTE_ADDR"] = "1.1.1.1"
+            for _ in range(3):
+                client_a.get("/api/transactions")
+            assert client_a.get("/api/transactions").status_code == 429
+
+            client_b.environ_base["HTTP_AUTHORIZATION"] = f"Bearer {TEST_API_TOKEN}"
+            client_b.environ_base["REMOTE_ADDR"] = "2.2.2.2"
+            assert client_b.get("/api/transactions").status_code == 200
+
+    def test_flask_debug_defaults_off(self, monkeypatch):
+        monkeypatch.delenv("FLASK_DEBUG", raising=False)
+        reloaded = importlib.reload(constants)
+        assert reloaded.FLASK_DEBUG is False
+        importlib.reload(constants)
+
+    def test_flask_debug_enabled_via_env(self, monkeypatch):
+        monkeypatch.setenv("FLASK_DEBUG", "true")
+        reloaded = importlib.reload(constants)
+        assert reloaded.FLASK_DEBUG is True
+        monkeypatch.delenv("FLASK_DEBUG", raising=False)
+        importlib.reload(constants)
 
 # ---------------------------------------------------------------------------
 # Test suite: API endpoints - Read operations

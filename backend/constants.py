@@ -53,6 +53,18 @@ API_TOKEN = os.environ.get("API_TOKEN")
 # to a local DB directly.
 REMOTE_API_URL = os.environ.get("REMOTE_API_URL")
 
+# FLASK_DEBUG: enables Flask's reloader and interactive debugger. Must stay
+# off whenever the server is reachable over the network — the interactive
+# debugger allows arbitrary code execution if an unhandled exception exposes
+# it. Off by default; opt in explicitly for local development.
+FLASK_DEBUG = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
+
+# Auth rate limiting: after this many failed /api/* auth attempts from the
+# same IP within the window, further attempts are rejected with 429 until
+# the window elapses. Slows down token brute-forcing/guessing.
+AUTH_MAX_FAILED_ATTEMPTS = 10
+AUTH_LOCKOUT_WINDOW_SECONDS = 300
+
 # ---------------------------------------------------------------------------
 # Date & time formats
 # ---------------------------------------------------------------------------

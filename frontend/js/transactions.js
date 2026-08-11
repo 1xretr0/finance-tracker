@@ -329,9 +329,9 @@ function selectRow(row) {
 
     const cells = row.querySelectorAll("td");
 
-    cells[2].innerHTML = `<input type="number" class="inline-edit-input ${amountClass}" step="0.01" value="${amount}">`;
-    cells[3].innerHTML = `<input type="text" class="inline-edit-input" value="${description}">`;
-    cells[4].innerHTML = `<input type="text" class="inline-edit-input" list="category-list" value="${category}">`;
+    cells[2].innerHTML = `<input type="number" class="inline-edit-input ${amountClass}" step="0.01" value="${escapeHTML(amount)}">`;
+    cells[3].innerHTML = `<input type="text" class="inline-edit-input" value="${escapeHTML(description)}">`;
+    cells[4].innerHTML = `<input type="text" class="inline-edit-input" list="category-list" value="${escapeHTML(category)}">`;
     cells[5].innerHTML = `
         <button class="btn-save-row" title="Save">&#10003;</button>
         <button class="btn-delete-row" title="Delete">&#128465;</button>
