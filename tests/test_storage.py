@@ -5,7 +5,7 @@ import pytest
 from backend.db.storage import (
     init_db, insert_transactions, get_transactions, get_summary, get_connection,
     get_uncategorized, update_categories, get_categories, create_category,
-    update_transaction, delete_transaction,
+    update_transaction, delete_transaction, get_user, _connection,
 )
 import backend.db.storage as storage
 
@@ -367,6 +367,26 @@ class TestCreateCategory:
         name = create_category("TRANSPORT")
         assert name == "TRANSPORT"
         assert "TRANSPORT" in get_categories()
+
+# ---------------------------------------------------------------------------
+# Test suite: User authentication
+# ---------------------------------------------------------------------------
+class TestGetUser:
+    def _insert_user(self, username="sebas", password_hash="hashed"):
+        with _connection() as conn:
+            conn.execute(
+                "INSERT INTO users (username, password_hash, created_at) VALUES (?, ?, ?)",
+                (username, password_hash, "2026-01-01T00:00:00"),
+            )
+
+    def test_returns_none_for_unknown_user(self):
+        assert get_user("nobody") is None
+
+    def test_returns_user_row_for_existing_user(self):
+        self._insert_user(username="sebas", password_hash="hashed-pw")
+        user = get_user("sebas")
+        assert user["username"] == "sebas"
+        assert user["password_hash"] == "hashed-pw"
 
 # ---------------------------------------------------------------------------
 # Test suite: Transaction update & delete operations

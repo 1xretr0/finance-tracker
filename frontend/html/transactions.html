@@ -14,6 +14,8 @@
             <a href="/">Overview</a>
             <a href="/categorize">Categorize</a>
             <a href="/transactions" class="active" aria-current="page">Transactions</a>
+            <span class="header-user" id="logged-user"></span>
+            <button class="btn-logout" title="Log out">Log out</button>
         </nav>
     </header>
 
@@ -121,14 +123,6 @@
                 <div class="form-row">
                     <label for="tx-form-category">Category</label>
                     <input type="text" id="tx-form-category" list="category-list">
-                </div>
-                <div class="form-row">
-                    <label for="tx-form-person">Person</label>
-                    <input type="text" id="tx-form-person">
-                </div>
-                <div class="form-row">
-                    <label for="tx-form-reference">Reference</label>
-                    <input type="text" id="tx-form-reference">
                 </div>
                 <div class="form-actions">
                     <button type="button" class="btn-modal-cancel" id="modal-cancel">Cancel</button>

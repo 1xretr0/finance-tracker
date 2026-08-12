@@ -571,6 +571,12 @@ function closeNewTxModal() {
     document.getElementById("new-tx-modal").hidden = true;
 }
 
+// Manual transactions have no bank-issued reference, but `reference`
+// participates in the dedup unique index, so give each one a unique value.
+function generateReference() {
+    return `MAN-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+}
+
 async function submitNewTx(e) {
     e.preventDefault();
 
@@ -579,22 +585,20 @@ async function submitNewTx(e) {
     const date = document.getElementById("tx-form-date").value;
     const description = document.getElementById("tx-form-description").value.trim();
     const category = document.getElementById("tx-form-category").value.trim();
-    const person = document.getElementById("tx-form-person").value.trim();
-    const reference = document.getElementById("tx-form-reference").value.trim();
 
     if (isNaN(amount) || amount < 0) return;
 
-    const payload = { type, amount, date };
+    const payload = { type, amount, date, person: getLoggedUser(), reference: generateReference() };
 
     if (type === TX_TYPE_TRANSFER) {
         payload.sender_bank = description || null;
+		payload.concept = TX_TYPE_TRANSFER;
     } else {
         payload.merchant = description || null;
+		payload.concept = description || null;
     }
 
     if (category) payload.category = category.toUpperCase();
-    if (person) payload.person = person;
-    if (reference) payload.reference = reference;
 
     const submitBtn = document.querySelector(".btn-modal-submit");
     setButtonLoading(submitBtn, true);
@@ -652,11 +656,13 @@ function initNewTxModal() {
 // ---------------------------------------------------------------------------
 // Bootstrap
 // ---------------------------------------------------------------------------
-loadCategories().then(() => {
-    buildCategoryDatalist();
-    initMonthFilter();
-    initEditMode();
-    initNewTxModal();
-    initSort();
-    initFilter();
-});
+if (requireAuth()) {
+    loadCategories().then(() => {
+        buildCategoryDatalist();
+        initMonthFilter();
+        initEditMode();
+        initNewTxModal();
+        initSort();
+        initFilter();
+    });
+}

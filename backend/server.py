@@ -8,6 +8,7 @@ from collections import defaultdict, deque
 from datetime import datetime
 
 from flask import Flask, jsonify, request, send_from_directory
+from werkzeug.security import check_password_hash
 
 from backend.db.storage import (
     init_db,
@@ -24,6 +25,7 @@ from backend.db.storage import (
     get_categories,
     create_category,
     insert_transactions,
+    get_user,
 )
 from backend.constants import (
     TX_TYPE_PURCHASE,
@@ -79,6 +81,12 @@ def require_api_token():
     if _is_locked_out(ip):
         return jsonify({"error": "Too many failed attempts, try again later"}), 429
 
+    # /api/login is how a browser session obtains the bearer token in the
+    # first place, so it can't require one — it's still covered by the
+    # lockout check above and records its own failures below.
+    if request.path == "/api/login":
+        return None
+
     auth_header = request.headers.get("Authorization", "")
     if not hmac.compare_digest(auth_header, f"Bearer {API_TOKEN}"):
         _record_failed_attempt(ip)
@@ -88,6 +96,11 @@ def require_api_token():
 # ---------------------------------------------------------------------------
 # Frontend page routes
 # ---------------------------------------------------------------------------
+@app.route("/login")
+def login_page():
+    return send_from_directory(HTML_DIR, "login.html")
+
+
 @app.route("/")
 def index():
     return send_from_directory(HTML_DIR, "index.html")
@@ -106,6 +119,26 @@ def transactions_page():
 @app.route("/<path:filename>")
 def static_files(filename):
     return send_from_directory(FRONTEND_DIR, filename)
+
+# ---------------------------------------------------------------------------
+# API routes - Auth
+# ---------------------------------------------------------------------------
+@app.route("/api/login", methods=["POST"])
+def api_login():
+    if not API_TOKEN:
+        return jsonify({"error": "Server auth is not configured"}), 503
+
+    data = request.get_json()
+    if not data or "username" not in data or "password" not in data:
+        return jsonify({"error": "Expected {username, password}"}), 400
+
+    ip = request.remote_addr or "unknown"
+    user = get_user(data["username"])
+    if not user or not check_password_hash(user["password_hash"], data["password"]):
+        _record_failed_attempt(ip)
+        return jsonify({"error": "Invalid credentials"}), 401
+
+    return jsonify({"token": API_TOKEN, "username": user["username"]})
 
 # ---------------------------------------------------------------------------
 # API routes - Read operations

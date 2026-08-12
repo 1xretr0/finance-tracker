@@ -76,6 +76,30 @@ nav a[aria-current="page"] {
     background: var(--bg-input);
 }
 
+.header-user {
+    margin-left: var(--space-sm);
+    padding: var(--space-sm) 0;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.btn-logout {
+    padding: var(--space-sm) var(--space-md);
+    background: none;
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 0.85rem;
+}
+
+.btn-logout:hover {
+    color: var(--color-expense);
+    border-color: var(--color-expense);
+}
+
 .chart-section {
     background: var(--bg-card);
     padding: var(--space-lg);

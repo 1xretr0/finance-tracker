@@ -25,3 +25,7 @@ __pycache__/
 
 # OS
 .DS_Store
+
+# debugging
+tests/gmail_responses/*
+tests/*.txt

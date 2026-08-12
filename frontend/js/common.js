@@ -27,24 +27,56 @@ function escapeHTML(str) {
 // API auth helper
 // ---------------------------------------------------------------------------
 // The hosted server requires a shared-secret bearer token on every /api/*
-// request. The token is kept in localStorage and attached to every API call
-// via apiFetch(); on a 401 it's cleared and the user is re-prompted.
+// request. The token is obtained via the /login page (POST /api/login),
+// kept in localStorage, and attached to every API call via apiFetch(); on a
+// 401 it's cleared and the user is sent back to /login.
 const API_TOKEN_STORAGE_KEY = "financeTrackerApiToken";
+const API_USER_STORAGE_KEY = "financeTrackerUsername";
 
 function getApiToken() {
-    let token = localStorage.getItem(API_TOKEN_STORAGE_KEY);
-    if (!token) {
-        token = prompt("Enter API token:") || "";
-        if (token) localStorage.setItem(API_TOKEN_STORAGE_KEY, token);
-    }
-    return token;
+    return localStorage.getItem(API_TOKEN_STORAGE_KEY) || "";
 }
+
+function getLoggedUser() {
+    return localStorage.getItem(API_USER_STORAGE_KEY) || "";
+}
+
+// Every page must be logged in before it renders/loads data. Call this as
+// the very first step of a page's bootstrap, before any data fetch, and
+// skip the rest of the bootstrap if it returns false.
+function requireAuth() {
+    if (!getApiToken()) {
+        const next = encodeURIComponent(window.location.pathname);
+        window.location.href = `/login?next=${next}`;
+        return false;
+    }
+    return true;
+}
+
+function logout() {
+    localStorage.removeItem(API_TOKEN_STORAGE_KEY);
+    localStorage.removeItem(API_USER_STORAGE_KEY);
+    window.location.href = "/login";
+}
+
+// The "Log out" control lives in the shared header markup on every page;
+// wire it here once instead of duplicating the listener per page script.
+document.addEventListener("click", (e) => {
+    if (e.target.closest(".btn-logout")) logout();
+});
+
+document.addEventListener("DOMContentLoaded", () => {
+    const usernameEl = document.getElementById("logged-user");
+    if (usernameEl) usernameEl.textContent = getLoggedUser();
+});
 
 async function apiFetch(url, options = {}) {
     const headers = { ...(options.headers || {}), Authorization: `Bearer ${getApiToken()}` };
     const res = await fetch(url, { ...options, headers });
     if (res.status === 401) {
         localStorage.removeItem(API_TOKEN_STORAGE_KEY);
+        localStorage.removeItem(API_USER_STORAGE_KEY);
+        window.location.href = "/login";
     }
     return res;
 }

@@ -155,5 +155,7 @@ function initEventHandlers() {
 // ---------------------------------------------------------------------------
 // Bootstrap
 // ---------------------------------------------------------------------------
-initEventHandlers();
-init();
+if (requireAuth()) {
+    initEventHandlers();
+    init();
+}

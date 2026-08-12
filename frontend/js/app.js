@@ -293,8 +293,10 @@ function initDelegation() {
 // ---------------------------------------------------------------------------
 // Bootstrap
 // ---------------------------------------------------------------------------
-loadSavingsChart().then(() => {
-    initBreakdownMonth();
-    initQuarterFilter();
-    initDelegation();
-});
+if (requireAuth()) {
+    loadSavingsChart().then(() => {
+        initBreakdownMonth();
+        initQuarterFilter();
+        initDelegation();
+    });
+}

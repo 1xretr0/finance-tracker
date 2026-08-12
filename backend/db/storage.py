@@ -90,6 +90,14 @@ def init_db():
                 name TEXT NOT NULL UNIQUE
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+        """)
 
 # ---------------------------------------------------------------------------
 # Transaction insert operations
@@ -232,6 +240,18 @@ def create_category(name: str) -> str:
         except sqlite3.IntegrityError:
             pass
         return name
+
+# ---------------------------------------------------------------------------
+# User authentication
+# ---------------------------------------------------------------------------
+def get_user(username: str) -> dict | None:
+    """Looks up a user by username. Users are added directly to the DB
+    (no signup flow); this only validates against existing rows."""
+    with _connection() as conn:
+        row = conn.execute(
+            "SELECT * FROM users WHERE username = ?", (username,)
+        ).fetchone()
+        return dict(row) if row else None
 
 # ---------------------------------------------------------------------------
 # Transaction update & delete operations

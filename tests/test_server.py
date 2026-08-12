@@ -4,8 +4,9 @@
 import importlib
 
 import pytest
+from werkzeug.security import generate_password_hash
 from backend.server import app
-from backend.db.storage import init_db, insert_transactions
+from backend.db.storage import init_db, insert_transactions, _connection
 import backend.db.storage as storage
 import backend.server as server
 import backend.constants as constants
@@ -54,6 +55,14 @@ def seed_data():
         {"bank": "santander", "type": "transfer", "amount": 30000.0, "currency": "MXN", "date": "2026-04-01T12:00:00", "account_last4": "6466", "sender_bank": "HSBC", "tracking_key": "HSBC222"},
         {"bank": "santander", "type": "outgoing_transfer", "amount": 5000.0, "currency": "MXN", "date": "2026-03-15T08:00:00", "account_last4": "6466", "dest_account_last4": "9066", "dest_bank": "BBVA", "reference": "123456"},
     ])
+
+
+def seed_user(username="sebas", password="correct-password"):
+    with _connection() as conn:
+        conn.execute(
+            "INSERT INTO users (username, password_hash, created_at) VALUES (?, ?, ?)",
+            (username, generate_password_hash(password), "2026-01-01T00:00:00"),
+        )
 
 # ---------------------------------------------------------------------------
 # Test suite: Auth
@@ -127,6 +136,67 @@ class TestApiAuth:
         assert reloaded.FLASK_DEBUG is True
         monkeypatch.delenv("FLASK_DEBUG", raising=False)
         importlib.reload(constants)
+
+# ---------------------------------------------------------------------------
+# Test suite: Login
+# ---------------------------------------------------------------------------
+class TestLoginEndpoint:
+    def test_rejects_unknown_username(self):
+        with app.test_client() as unauth_client:
+            res = unauth_client.post("/api/login", json={"username": "nobody", "password": "x"})
+            assert res.status_code == 401
+
+    def test_rejects_wrong_password(self):
+        seed_user()
+        with app.test_client() as unauth_client:
+            res = unauth_client.post("/api/login", json={"username": "sebas", "password": "wrong"})
+            assert res.status_code == 401
+
+    def test_accepts_correct_credentials_and_returns_token(self):
+        seed_user()
+        with app.test_client() as unauth_client:
+            res = unauth_client.post("/api/login", json={"username": "sebas", "password": "correct-password"})
+            assert res.status_code == 200
+            data = res.get_json()
+            assert data["token"] == TEST_API_TOKEN
+            assert data["username"] == "sebas"
+
+    def test_does_not_require_bearer_token(self):
+        # /api/login is how a token is obtained in the first place, so it
+        # must be reachable without one, despite being under /api/.
+        seed_user()
+        with app.test_client() as unauth_client:
+            res = unauth_client.post("/api/login", json={"username": "sebas", "password": "correct-password"})
+            assert res.status_code == 200
+
+    def test_rejects_missing_fields(self):
+        with app.test_client() as unauth_client:
+            res = unauth_client.post("/api/login", json={"username": "sebas"})
+            assert res.status_code == 400
+
+    def test_unconfigured_token_rejects_login(self, monkeypatch):
+        monkeypatch.setattr(server, "API_TOKEN", None)
+        seed_user()
+        with app.test_client() as unauth_client:
+            res = unauth_client.post("/api/login", json={"username": "sebas", "password": "correct-password"})
+            assert res.status_code == 503
+
+    def test_locks_out_after_repeated_failed_logins(self, monkeypatch):
+        monkeypatch.setattr(server, "AUTH_MAX_FAILED_ATTEMPTS", 3)
+        server._failed_attempts.clear()
+        seed_user()
+        with app.test_client() as unauth_client:
+            for _ in range(3):
+                res = unauth_client.post("/api/login", json={"username": "sebas", "password": "wrong"})
+                assert res.status_code == 401
+
+            res = unauth_client.post("/api/login", json={"username": "sebas", "password": "correct-password"})
+            assert res.status_code == 429
+
+    def test_serves_login_page(self):
+        with app.test_client() as unauth_client:
+            res = unauth_client.get("/login")
+            assert res.status_code == 200
 
 # ---------------------------------------------------------------------------
 # Test suite: API endpoints - Read operations
