@@ -506,6 +506,23 @@ function buildCategoryDatalist() {
 }
 
 // ---------------------------------------------------------------------------
+// Banks
+// ---------------------------------------------------------------------------
+function buildBankDatalist() {
+    if (document.getElementById("bank-list")) return;
+
+    const dl = document.createElement("datalist");
+    dl.id = "bank-list";
+
+	BANKS_LIST.forEach((b) => {
+        const opt = document.createElement("option");
+        opt.value = b;
+        dl.appendChild(opt);
+    });
+    document.body.appendChild(dl);
+}
+
+// ---------------------------------------------------------------------------
 // Month filter
 // ---------------------------------------------------------------------------
 function initMonthFilter() {
@@ -585,10 +602,18 @@ async function submitNewTx(e) {
     const date = document.getElementById("tx-form-date").value;
     const description = document.getElementById("tx-form-description").value.trim();
     const category = document.getElementById("tx-form-category").value.trim();
+    const bank = document.getElementById("tx-form-bank").value.trim();
 
     if (isNaN(amount) || amount < 0) return;
 
-    const payload = { type, amount, date, person: getLoggedUser(), reference: generateReference() };
+    const payload = {
+		type,
+		amount,
+		date,
+		person: getLoggedUser(),
+		reference: generateReference(),
+		bank
+	};
 
     if (type === TX_TYPE_TRANSFER) {
         payload.sender_bank = description || null;
@@ -659,6 +684,7 @@ function initNewTxModal() {
 if (requireAuth()) {
     loadCategories().then(() => {
         buildCategoryDatalist();
+        buildBankDatalist();
         initMonthFilter();
         initEditMode();
         initNewTxModal();

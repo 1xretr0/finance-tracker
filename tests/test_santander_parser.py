@@ -2,6 +2,7 @@
 # Tests for Santander email parsers
 # ---------------------------------------------------------------------------
 from backend.banks.santander import parse_transaction
+from backend.constants import BANK_SANTANDER_LIKEU, BANK_SANTANDER, BANK_SANTANDER_GOLD
 
 # ---------------------------------------------------------------------------
 # Test data: Purchase emails (field-style)
@@ -68,7 +69,7 @@ class TestPurchaseParser:
 
     def test_bank_is_santander(self):
         tx = parse_transaction(PURCHASE_EMAIL)
-        assert tx["bank"] == "santander"
+        assert tx["bank"] == BANK_SANTANDER_LIKEU
 
     def test_amount_with_thousands(self):
         email = PURCHASE_EMAIL.replace("$618.20", "$1,234.56")
@@ -109,7 +110,7 @@ class TestPurchaseNarrativeParser:
 
     def test_bank_is_santander(self):
         tx = parse_transaction(PURCHASE_NARRATIVE_EMAIL)
-        assert tx["bank"] == "santander"
+        assert tx["bank"] == BANK_SANTANDER_LIKEU
 
     def test_amount_with_thousands(self):
         email = PURCHASE_NARRATIVE_EMAIL.replace("$74.63", "$1,234.56")
@@ -163,7 +164,7 @@ class TestUniquePointsPurchaseParser:
 
     def test_bank_is_santander(self):
         tx = parse_transaction(UNIQUE_POINTS_PURCHASE_EMAIL)
-        assert tx["bank"] == "santander"
+        assert tx["bank"] == BANK_SANTANDER_GOLD
 
     def test_amount_with_thousands(self):
         email = UNIQUE_POINTS_PURCHASE_EMAIL.replace("$1,999.00", "$12,345.67")
@@ -226,7 +227,7 @@ class TestTransferParser:
 
     def test_bank_is_santander(self):
         tx = parse_transaction(TRANSFER_EMAIL)
-        assert tx["bank"] == "santander"
+        assert tx["bank"] == BANK_SANTANDER
 
 # ---------------------------------------------------------------------------
 # Test data: Transfer emails (outgoing - narrative style)
@@ -284,7 +285,7 @@ class TestOutgoingTransferParser:
 
     def test_bank_is_santander(self):
         tx = parse_transaction(OUTGOING_TRANSFER_EMAIL)
-        assert tx["bank"] == "santander"
+        assert tx["bank"] == BANK_SANTANDER
 
     def test_ignores_transfer_to_mercado_pago_w(self):
         tx = parse_transaction(IGNORED_OUTGOING_TRANSFER_EMAIL)
@@ -391,7 +392,7 @@ class TestOutgoingTransferConfirmationParser:
 
     def test_bank_is_santander(self):
         tx = parse_transaction(OUTGOING_TRANSFER_CONFIRMATION_EMAIL)
-        assert tx["bank"] == "santander"
+        assert tx["bank"] == BANK_SANTANDER
 
     def test_currency_is_mxn(self):
         tx = parse_transaction(OUTGOING_TRANSFER_CONFIRMATION_EMAIL)

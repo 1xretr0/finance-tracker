@@ -8,6 +8,7 @@ responses to test the complete pipeline: extraction → decoding → parsing.
 This ensures we're testing with the same data format that Gmail actually delivers.
 """
 from backend.banks.santander import _extract_plain_body, parse_transaction
+from backend.constants import BANK_SANTANDER_LIKEU, BANK_SANTANDER, BANK_SANTANDER_GOLD
 
 # ---------------------------------------------------------------------------
 # Real Gmail API payload data (base64-encoded, extracted from actual responses)
@@ -84,7 +85,7 @@ class TestTransferConfirmationWithGmailData:
     def test_bank_is_santander(self):
         plain_text = _extract_plain_body(TRANSFER_CONFIRMATION_PAYLOAD)
         tx = parse_transaction(plain_text)
-        assert tx["bank"] == "santander"
+        assert tx["bank"] == BANK_SANTANDER
 
     def test_currency_is_mxn(self):
         plain_text = _extract_plain_body(TRANSFER_CONFIRMATION_PAYLOAD)
@@ -172,7 +173,7 @@ class TestUniquePointsPurchaseWithGmailData:
     def test_bank_is_santander(self):
         plain_text = _extract_plain_body(UNIQUE_POINTS_PAYLOAD)
         tx = parse_transaction(plain_text)
-        assert tx["bank"] == "santander"
+        assert tx["bank"] == BANK_SANTANDER_GOLD
 
     def test_currency_is_mxn(self):
         plain_text = _extract_plain_body(UNIQUE_POINTS_PAYLOAD)

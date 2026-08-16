@@ -3,7 +3,21 @@ import os
 # ---------------------------------------------------------------------------
 # Bank identifiers
 # ---------------------------------------------------------------------------
-BANK_SANTANDER = "santander"
+BANK_SANTANDER = "SANTANDER"
+BANK_SANTANDER_LIKEU = "SANTANDER LIKEU"
+BANK_SANTANDER_GOLD = "SANTANDER GOLD"
+BANK_MERCADOPAGO = "MERCADO PAGO"
+BANK_BBVA = "BBVA"
+BANK_BBVA_AZUL = "BBVA AZUL"
+
+BANKS_SET = (
+	BANK_SANTANDER,
+	BANK_SANTANDER_LIKEU,
+	BANK_SANTANDER_GOLD,
+	BANK_MERCADOPAGO,
+	BANK_BBVA,
+	BANK_BBVA_AZUL
+)
 
 # ---------------------------------------------------------------------------
 # Transaction types
@@ -11,6 +25,8 @@ BANK_SANTANDER = "santander"
 TX_TYPE_PURCHASE = "purchase"
 TX_TYPE_TRANSFER = "transfer"
 TX_TYPE_OUTGOING_TRANSFER = "outgoing_transfer"
+
+TX_TYPES_SET = (TX_TYPE_PURCHASE, TX_TYPE_TRANSFER, TX_TYPE_OUTGOING_TRANSFER)
 
 # ---------------------------------------------------------------------------
 # Currency & categories

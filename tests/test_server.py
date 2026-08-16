@@ -456,17 +456,10 @@ class TestCreateTransactionEndpoint:
     def test_creates_valid_transaction(self, client):
         res = client.post("/api/transactions", json={
             "type": "purchase", "amount": 150.0, "date": "2026-06-01T10:00:00",
-            "merchant": "OXXO", "currency": "MXN",
+            "merchant": "OXXO", "currency": "MXN", "bank": "SANTANDER GOLD"
         })
         assert res.status_code == 201
         assert res.get_json()["success"] is True
-
-    def test_defaults_bank_to_manual(self, client):
-        client.post("/api/transactions", json={
-            "type": "purchase", "amount": 50.0, "date": "2026-06-01T10:00:00",
-        })
-        tx = client.get("/api/transactions").get_json()[0]
-        assert tx["bank"] == "manual"
 
     def test_rejects_missing_required_field(self, client):
         res = client.post("/api/transactions", json={"type": "purchase", "amount": 50.0})
@@ -485,7 +478,13 @@ class TestCreateTransactionEndpoint:
         assert res.status_code == 400
 
     def test_returns_409_for_duplicate(self, client):
-        tx = {"type": "purchase", "amount": 100.0, "date": "2026-06-01T10:00:00", "merchant": "OXXO"}
+        tx = {
+            "type": "purchase",
+            "amount": 100.0,
+            "date": "2026-06-01T10:00:00",
+            "merchant": "OXXO",
+            "bank": "SANTANDER GOLD"
+        }
         client.post("/api/transactions", json=tx)
         res = client.post("/api/transactions", json=tx)
         assert res.status_code == 409

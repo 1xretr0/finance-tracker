@@ -28,14 +28,13 @@ from backend.db.storage import (
     get_user,
 )
 from backend.constants import (
-    TX_TYPE_PURCHASE,
-    TX_TYPE_TRANSFER,
-    TX_TYPE_OUTGOING_TRANSFER,
     SERVER_PORT,
     API_TOKEN,
     AUTH_MAX_FAILED_ATTEMPTS,
     AUTH_LOCKOUT_WINDOW_SECONDS,
     FLASK_DEBUG,
+    TX_TYPES_SET,
+    BANKS_SET
 )
 
 app = Flask(__name__, static_folder=None)
@@ -219,7 +218,7 @@ def api_create_transaction():
     if not data or not isinstance(data, dict):
         return jsonify({"error": "Expected a JSON object"}), 400
 
-    required = ["type", "amount", "date"]
+    required = ["type", "amount", "date", "bank"]
     for field in required:
         if field not in data:
             return jsonify({"error": f"Missing required field: {field}"}), 400
@@ -227,11 +226,14 @@ def api_create_transaction():
     if not isinstance(data["amount"], (int, float)) or data["amount"] < 0:
         return jsonify({"error": "Amount must be a non-negative number"}), 400
 
-    if data["type"] not in (TX_TYPE_PURCHASE, TX_TYPE_TRANSFER, TX_TYPE_OUTGOING_TRANSFER):
+    if data["type"] not in TX_TYPES_SET:
         return jsonify({"error": "Invalid transaction type"}), 400
 
+    if data["bank"] not in BANKS_SET:
+        return jsonify({"error": "Invalid bank"}), 400
+
     tx = {
-        "bank": data.get("bank", "manual"),
+        "bank": data['bank'],
         "type": data["type"],
         "amount": data["amount"],
         "currency": data.get("currency", "MXN"),

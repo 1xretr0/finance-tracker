@@ -14,6 +14,21 @@ const QUARTER_MONTHS = {
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
+const CHART_COLORS = [
+    "#4ade80", "#60a5fa", "#f472b6", "#facc15", "#a78bfa",
+    "#fb923c", "#34d399", "#f87171", "#38bdf8", "#c084fc",
+];
+
+const EXPENSE_COLORS = [
+    "#f87171", "#fb923c", "#f472b6", "#ef4444", "#fca5a5",
+    "#e11d48", "#fb7185", "#dc2626", "#f43f5e", "#b91c1c",
+];
+
+const API_TOKEN_STORAGE_KEY = "financeTrackerApiToken";
+const API_USER_STORAGE_KEY = "financeTrackerUsername";
+
+const BANKS_LIST = ["SANTANDER", "SANTANDER LIKEU", "SANTANDER GOLD", "MERCADO PAGO", "BBVA", "BBVA AZUL"]
+
 // ---------------------------------------------------------------------------
 // Utility functions
 // ---------------------------------------------------------------------------
@@ -30,8 +45,6 @@ function escapeHTML(str) {
 // request. The token is obtained via the /login page (POST /api/login),
 // kept in localStorage, and attached to every API call via apiFetch(); on a
 // 401 it's cleared and the user is sent back to /login.
-const API_TOKEN_STORAGE_KEY = "financeTrackerApiToken";
-const API_USER_STORAGE_KEY = "financeTrackerUsername";
 
 function getApiToken() {
     return localStorage.getItem(API_TOKEN_STORAGE_KEY) || "";

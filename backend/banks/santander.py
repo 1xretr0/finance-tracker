@@ -13,6 +13,8 @@ from googleapiclient.discovery import build
 
 from backend.constants import (
 	BANK_SANTANDER,
+	BANK_SANTANDER_LIKEU,
+	BANK_SANTANDER_GOLD,
 	CURRENCY_MXN,
 	TX_TYPE_PURCHASE,
 	TX_TYPE_TRANSFER,
@@ -183,7 +185,7 @@ def _parse_purchase(decoded: str) -> dict | None:
 	tx_date = datetime.strptime(date_str, DATE_FORMAT_TX)
 
 	return {
-		"bank": BANK_SANTANDER,
+		"bank": BANK_SANTANDER_LIKEU,
 		"card_last4": card_match.group(1) if card_match else None,
 		"amount": float(amount_str),
 		"currency": CURRENCY_MXN,
@@ -210,7 +212,7 @@ def _parse_purchase_narrative(decoded: str) -> dict | None:
 	tx_date = datetime.strptime(date_str, DATE_FORMAT_TX)
 
 	return {
-		"bank": BANK_SANTANDER,
+		"bank": BANK_SANTANDER_LIKEU,
 		"card_last4": card_match.group(1) if card_match else None,
 		"amount": float(amount_str),
 		"currency": CURRENCY_MXN,
@@ -237,7 +239,7 @@ def _parse_unique_points_purchase(decoded: str) -> dict | None:
 	tx_date = datetime.strptime(date_str, DATE_FORMAT_TX)
 
 	return {
-		"bank": BANK_SANTANDER,
+		"bank": BANK_SANTANDER_GOLD,
 		"card_last4": card_match.group(1) if card_match else None,
 		"amount": float(amount_str),
 		"currency": CURRENCY_MXN,
