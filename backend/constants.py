@@ -81,6 +81,10 @@ FLASK_DEBUG = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
 AUTH_MAX_FAILED_ATTEMPTS = 10
 AUTH_LOCKOUT_WINDOW_SECONDS = 300
 
+GITHUB_WEBHOOK_SECRET = os.environ.get("GITHUB_WEBHOOK_SECRET")
+
+WSGI_PATH = "/var/www/retr0py_pythonanywhere_com_wsgi.py"
+
 # ---------------------------------------------------------------------------
 # Date & time formats
 # ---------------------------------------------------------------------------

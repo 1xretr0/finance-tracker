@@ -2,7 +2,10 @@
 # Flask API server & static file serving
 # ---------------------------------------------------------------------------
 import hmac
+import hashlib
 import os
+import subprocess
+import threading
 import time
 from collections import defaultdict, deque
 from datetime import datetime
@@ -30,11 +33,13 @@ from backend.db.storage import (
 from backend.constants import (
     SERVER_PORT,
     API_TOKEN,
+    GITHUB_WEBHOOK_SECRET,
     AUTH_MAX_FAILED_ATTEMPTS,
     AUTH_LOCKOUT_WINDOW_SECONDS,
     FLASK_DEBUG,
     TX_TYPES_SET,
-    BANKS_SET
+    BANKS_SET,
+    WSGI_PATH
 )
 
 app = Flask(__name__, static_folder=None)
@@ -294,6 +299,69 @@ def api_create_category():
         return jsonify({"error": "Expected {name}"}), 400
     name = create_category(data["name"].strip())
     return jsonify({"name": name}), 201
+
+# ---------------------------------------------------------------------------
+# Github webhook setup
+# ---------------------------------------------------------------------------
+def verify_signature(payload, signature_header, secret):
+    """Verifies that the webhook payload came from GitHub."""
+    if not signature_header:
+        return False
+
+    # Header comes in as 'sha256=<hash>'
+    sha_type, signature = signature_header.split('=')
+    if sha_type != 'sha256':
+        return False
+
+    mac = hmac.new(secret.encode('utf-8'), msg=payload, digestmod=hashlib.sha256)
+    return hmac.compare_digest(mac.hexdigest(), signature)
+
+def trigger_reload():
+    """Waits for the HTTP response to be sent to GitHub, then reloads WSGI."""
+    time.sleep(1)
+
+    # Touching the WSGI file reloads PythonAnywhere web apps automatically
+    if os.path.exists(WSGI_PATH):
+        os.utime(WSGI_PATH, None)
+
+@app.route('/update_server', methods=['POST'])
+def webhook():
+    # 1. Verify HMAC Signature
+    signature = request.headers.get('X-Hub-Signature-256')
+    if not verify_signature(request.data, signature, GITHUB_WEBHOOK_SECRET):
+        return jsonify({"error": "Invalid signature"}), 403
+
+    # 2. Only respond to push events
+    event = request.headers.get('X-GitHub-Event', 'ping')
+    if event == 'ping':
+        return jsonify({"message": "Ping received successfully"}), 200
+    if event != 'push':
+        return jsonify({"message": f"Event {event} ignored"}), 200
+
+    # 3. Pull latest code and trigger asynchronous reload
+    try:
+        repo_dir = "/home/retr0py/finance-tracker"
+        pull_output = subprocess.check_output(
+            ["git", "pull", "origin", "main"],
+            cwd=repo_dir,
+            stderr=subprocess.STDOUT,
+            text=True
+        )
+
+        threading.Thread(target=trigger_reload).start()
+
+        return jsonify({
+            "status": "success",
+            "message": "Git pull successful. Server reload scheduled.",
+            "output": pull_output
+        }), 200
+
+    except subprocess.CalledProcessError as e:
+        return jsonify({
+            "status": "error",
+            "message": "Git pull failed",
+            "details": e.output
+        }), 500
 
 # ---------------------------------------------------------------------------
 # Application entry point
