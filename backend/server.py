@@ -324,7 +324,7 @@ def trigger_reload():
     if os.path.exists(WSGI_PATH):
         os.utime(WSGI_PATH, None)
 
-@app.route('/update_server', methods=['POST'])
+@app.route('/push', methods=['POST'])
 def webhook():
     # 1. Verify HMAC Signature
     signature = request.headers.get('X-Hub-Signature-256')
