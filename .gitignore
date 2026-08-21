@@ -8,9 +8,6 @@ token.json
 *.db-wal
 *.storage
 
-# Runtime state
-backend/banks/santander_last_run.txt
-
 # Python
 .venv/
 __pycache__/
