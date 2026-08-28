@@ -27,6 +27,7 @@
     padding: 20px;
     border-radius: var(--radius-lg);
     overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
 .table-section h3 {
@@ -467,5 +468,17 @@ tr.row-selected {
 @media (max-width: 768px) {
     .tables-grid {
         grid-template-columns: 1fr;
+    }
+    th, td {
+        padding: 8px 8px;
+        font-size: 0.8rem;
+        white-space: nowrap;
+    }
+}
+
+@media (max-width: 480px) {
+    .sort-menu,
+    .filter-menu {
+        max-width: calc(100vw - 32px);
     }
 }

@@ -54,6 +54,7 @@ async function loadSavingsChart() {
         },
         options: {
             responsive: true,
+            maintainAspectRatio: false,
             plugins: {
                 legend: { display: false },
                 tooltip: {
@@ -82,6 +83,23 @@ async function loadSavingsChart() {
 // ---------------------------------------------------------------------------
 // Breakdown charts (income/expense doughnuts)
 // ---------------------------------------------------------------------------
+// Chart.js centers the doughnut arc on chart.chartArea, which shrinks to make
+// room for the bottom legend — that center drifts from the wrapper's CSS
+// center as the legend's relative share of the box grows on narrow screens.
+// Re-anchor the overlay to the real chartArea center on every layout/resize.
+function centerTotalOnChartArea(totalElementId) {
+    return {
+        id: `center-total-${totalElementId}`,
+        afterLayout(chart) {
+            const totalEl = document.getElementById(totalElementId);
+            if (!totalEl) return;
+            const { left, right, top, bottom } = chart.chartArea;
+            totalEl.style.left = `${(left + right) / 2}px`;
+            totalEl.style.top = `${(top + bottom) / 2}px`;
+        },
+    };
+}
+
 async function loadBreakdownCharts(month) {
     let data;
     try {
@@ -109,8 +127,10 @@ async function loadBreakdownCharts(month) {
                 borderWidth: 2,
             }],
         },
+        plugins: [centerTotalOnChartArea("income-total")],
         options: {
             responsive: true,
+            maintainAspectRatio: false,
             cutout: "65%",
             plugins: {
                 legend: {
@@ -139,8 +159,10 @@ async function loadBreakdownCharts(month) {
                 borderWidth: 2,
             }],
         },
+        plugins: [centerTotalOnChartArea("expense-total")],
         options: {
             responsive: true,
+            maintainAspectRatio: false,
             cutout: "65%",
             plugins: {
                 legend: {

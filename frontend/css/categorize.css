@@ -131,3 +131,19 @@
     background: var(--border);
     color: #ccc;
 }
+
+@media (max-width: 600px) {
+    .categorize-controls {
+        flex-wrap: wrap;
+    }
+    .category-input-wrapper {
+        flex-basis: 100%;
+    }
+    .control-buttons {
+        width: 100%;
+    }
+    .control-buttons .btn-save,
+    .control-buttons .btn-skip {
+        flex: 1;
+    }
+}
