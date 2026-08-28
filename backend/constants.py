@@ -119,6 +119,7 @@ UPDATABLE_FIELDS = {"amount", "merchant", "category"}
 IGNORED_ACCOUNT_TRANSFERS = [
     {"account_last4": "6184", "bank": "Mercado Pago W"},
     {"account_last4": "8275", "bank": "STP"},
+    {"account_last4": "6031", "bank": "GBM"},
 ]
 
 # ---------------------------------------------------------------------------
