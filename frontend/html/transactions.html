@@ -100,42 +100,6 @@
         </div>
     </main>
 
-    <div class="modal-overlay" id="new-tx-modal" hidden>
-        <div class="modal">
-            <div class="modal-header">
-                <h3 id="modal-title">New Transaction</h3>
-                <button class="modal-close" id="modal-close">&times;</button>
-            </div>
-            <form id="new-tx-form">
-                <input type="hidden" id="tx-form-type">
-                <div class="form-row">
-                    <label for="tx-form-amount">Amount</label>
-                    <input type="number" id="tx-form-amount" step="0.01" min="0" required>
-                </div>
-                <div class="form-row">
-                    <label for="tx-form-date">Date</label>
-                    <input type="datetime-local" id="tx-form-date" required>
-                </div>
-                <div class="form-row">
-                    <label for="tx-form-description" id="tx-form-description-label">Description</label>
-                    <input type="text" id="tx-form-description" required>
-                </div>
-                <div class="form-row">
-                    <label for="tx-form-category">Category</label>
-                    <input type="text" id="tx-form-category" list="category-list">
-                </div>
-				<div class="form-row">
-                    <label for="tx-form-bank">Bank</label>
-                    <input type="text" id="tx-form-bank" list="bank-list" required>
-                </div>
-                <div class="form-actions">
-                    <button type="button" class="btn-modal-cancel" id="modal-cancel">Cancel</button>
-                    <button type="submit" class="btn-modal-submit">Save</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
     <script src="/js/common.js"></script>
     <script src="/js/transactions.js"></script>
 </body>

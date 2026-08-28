@@ -168,3 +168,276 @@ function setButtonLoading(btn, loading) {
         delete btn.dataset.originalText;
     }
 }
+
+// ---------------------------------------------------------------------------
+// New transaction modal (shared across every page — a persistent "+ New"
+// nav button and a Ctrl/Cmd+K shortcut both open this). The markup is
+// injected once here rather than duplicated in each HTML file; the
+// transactions page's per-table "+ New" buttons (`.btn-new-tx[data-type]`)
+// reuse the same modal and skip straight to the form.
+// ---------------------------------------------------------------------------
+const NEW_TX_MODAL_HTML = `
+    <div class="modal-overlay" id="new-tx-modal" hidden>
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="modal-title">New Transaction</h3>
+                <button class="modal-close" id="modal-close">&times;</button>
+            </div>
+            <div class="tx-type-picker" id="tx-type-picker">
+                <button type="button" class="tx-type-btn income" id="tx-type-income">Income</button>
+                <button type="button" class="tx-type-btn expense" id="tx-type-expense">Expense</button>
+            </div>
+            <form id="new-tx-form" hidden>
+                <input type="hidden" id="tx-form-type">
+                <div class="form-row">
+                    <label for="tx-form-amount">Amount</label>
+                    <input type="number" id="tx-form-amount" step="0.01" min="0" required>
+                </div>
+                <div class="form-row">
+                    <label for="tx-form-date">Date</label>
+                    <input type="datetime-local" id="tx-form-date" required>
+                </div>
+                <div class="form-row">
+                    <label for="tx-form-description" id="tx-form-description-label">Description</label>
+                    <input type="text" id="tx-form-description" required>
+                </div>
+                <div class="form-row">
+                    <label for="tx-form-category">Category</label>
+                    <input type="text" id="tx-form-category" list="category-list">
+                </div>
+                <div class="form-row">
+                    <label for="tx-form-bank">Bank</label>
+                    <input type="text" id="tx-form-bank" list="bank-list" required>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-modal-cancel" id="modal-cancel">Cancel</button>
+                    <button type="submit" class="btn-modal-submit">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+`;
+
+// Categories are fetched once per page load purely to populate the datalist
+// and to validate what the user types — this form does not create new
+// categories (that stays a /categorize-only action), so there's no need to
+// keep a mutable global cache of them.
+async function loadCategories() {
+    return fetchJSON("/api/categories");
+}
+
+function buildCategoryDatalist(cats) {
+    if (document.getElementById("category-list")) return;
+    const dl = document.createElement("datalist");
+    dl.id = "category-list";
+    cats.forEach((c) => {
+        const opt = document.createElement("option");
+        opt.value = c;
+        dl.appendChild(opt);
+    });
+    document.body.appendChild(dl);
+}
+
+function buildBankDatalist() {
+    if (document.getElementById("bank-list")) return;
+
+    const dl = document.createElement("datalist");
+    dl.id = "bank-list";
+
+    BANKS_LIST.forEach((b) => {
+        const opt = document.createElement("option");
+        opt.value = b;
+        dl.appendChild(opt);
+    });
+    document.body.appendChild(dl);
+}
+
+// Manual transactions have no bank-issued reference, but `reference`
+// participates in the dedup unique index, so give each one a unique value.
+function generateReference() {
+    return `MAN-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+}
+
+function openTxTypePicker() {
+    const modal = document.getElementById("new-tx-modal");
+    if (!modal) return;
+    document.getElementById("new-tx-form").reset();
+    document.getElementById("modal-title").textContent = "New Transaction";
+    document.getElementById("tx-type-picker").hidden = false;
+    document.getElementById("new-tx-form").hidden = true;
+    modal.hidden = false;
+}
+
+function openNewTxModal(txType) {
+    const modal = document.getElementById("new-tx-modal");
+    const form = document.getElementById("new-tx-form");
+    const picker = document.getElementById("tx-type-picker");
+    const title = document.getElementById("modal-title");
+    const descLabel = document.getElementById("tx-form-description-label");
+    const typeInput = document.getElementById("tx-form-type");
+
+    form.reset();
+
+    if (txType === "income") {
+        title.textContent = "New Income";
+        descLabel.textContent = "Source";
+        typeInput.value = TX_TYPE_TRANSFER;
+    } else {
+        title.textContent = "New Expense";
+        descLabel.textContent = "Merchant";
+        typeInput.value = TX_TYPE_PURCHASE;
+    }
+
+    const now = new Date();
+    const localISO = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}T${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+    document.getElementById("tx-form-date").value = localISO;
+
+    picker.hidden = true;
+    form.hidden = false;
+    modal.hidden = false;
+    document.getElementById("tx-form-amount").focus();
+}
+
+function closeNewTxModal() {
+    document.getElementById("new-tx-modal").hidden = true;
+}
+
+async function submitNewTx(e) {
+    e.preventDefault();
+
+    const type = document.getElementById("tx-form-type").value;
+    const amount = parseFloat(document.getElementById("tx-form-amount").value);
+    const date = document.getElementById("tx-form-date").value;
+    const description = document.getElementById("tx-form-description").value.trim();
+    const category = document.getElementById("tx-form-category").value.trim();
+    const bank = document.getElementById("tx-form-bank").value.trim();
+
+    if (isNaN(amount) || amount < 0) return;
+
+    // This form only accepts existing categories — new ones are created via
+    // /categorize. Reject anything that doesn't match (case-insensitive).
+    let categoryValue = null;
+    if (category) {
+        const upper = category.toUpperCase();
+        const known = (window.__newTxCategories || []).some((c) => c.toUpperCase() === upper);
+        if (!known) {
+            showToast("Unknown category", "error");
+            return;
+        }
+        categoryValue = upper;
+    }
+
+    const payload = {
+        type,
+        amount,
+        date,
+        person: getLoggedUser(),
+        reference: generateReference(),
+        bank,
+    };
+
+    if (type === TX_TYPE_TRANSFER) {
+        payload.sender_bank = description || null;
+        payload.concept = TX_TYPE_TRANSFER;
+    } else {
+        payload.merchant = description || null;
+        payload.concept = description || null;
+    }
+
+    if (categoryValue) payload.category = categoryValue;
+
+    const submitBtn = document.querySelector(".btn-modal-submit");
+    setButtonLoading(submitBtn, true);
+
+    try {
+        const res = await apiFetch("/api/transactions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+        });
+
+        if (res.ok) {
+            closeNewTxModal();
+            showToast("Transaction created", "success");
+            // Pages that display transactions (e.g. /transactions) define this
+            // hook to refresh themselves; other pages simply do nothing.
+            window.onTransactionCreated?.();
+        } else if (res.status === 409) {
+            showToast("Duplicate transaction", "error");
+        } else {
+            showToast("Failed to create transaction", "error");
+        }
+    } catch (err) {
+        showToast("Failed to create transaction", "error");
+    } finally {
+        setButtonLoading(submitBtn, false);
+    }
+}
+
+// Injects the nav button + modal markup once the header exists, then wires
+// its listeners. Guarded on `header nav` so it's a no-op on pages without
+// the shared header (e.g. login).
+function initNewTxUI() {
+    const nav = document.querySelector("header nav");
+    if (!nav) return;
+
+    const navBtn = document.createElement("button");
+    navBtn.type = "button";
+    navBtn.className = "btn-nav-new";
+    navBtn.textContent = "+ New";
+    const logoutBtn = nav.querySelector(".btn-logout");
+    if (logoutBtn) nav.insertBefore(navBtn, logoutBtn);
+    else nav.appendChild(navBtn);
+
+    if (!document.getElementById("new-tx-modal")) {
+        document.body.insertAdjacentHTML("beforeend", NEW_TX_MODAL_HTML);
+    }
+
+    // Wiring must happen after injection — these elements don't exist before this point.
+    document.getElementById("modal-close").addEventListener("click", closeNewTxModal);
+    document.getElementById("modal-cancel").addEventListener("click", closeNewTxModal);
+    document.getElementById("new-tx-modal").addEventListener("click", (e) => {
+        if (e.target === e.currentTarget) closeNewTxModal();
+    });
+    document.getElementById("new-tx-form").addEventListener("submit", submitNewTx);
+    document.getElementById("tx-type-income").addEventListener("click", () => openNewTxModal("income"));
+    document.getElementById("tx-type-expense").addEventListener("click", () => openNewTxModal("expense"));
+
+    loadCategories().then((cats) => {
+        window.__newTxCategories = cats;
+        buildCategoryDatalist(cats);
+        buildBankDatalist();
+    });
+}
+
+// Delegated so it covers both the injected nav button and any pre-existing
+// per-table buttons (e.g. transactions.html's `.btn-new-tx[data-type]`,
+// which open the form directly at that type, skipping the picker).
+document.addEventListener("click", (e) => {
+    if (e.target.closest(".btn-nav-new")) {
+        openTxTypePicker();
+        return;
+    }
+    const btn = e.target.closest(".btn-new-tx");
+    if (btn) openNewTxModal(btn.dataset.type);
+});
+
+// Ctrl/Cmd+K opens the picker from anywhere, except while typing in a field
+// or when the modal is already open.
+document.addEventListener("keydown", (e) => {
+    if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== "k") return;
+    if (!document.querySelector("header nav")) return;
+
+    const modal = document.getElementById("new-tx-modal");
+    if (modal && !modal.hidden) return;
+
+    const target = e.target;
+    const isTyping = target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" ||
+        target.tagName === "SELECT" || target.isContentEditable);
+    if (isTyping) return;
+
+    e.preventDefault();
+    openTxTypePicker();
+});
+
+document.addEventListener("DOMContentLoaded", initNewTxUI);

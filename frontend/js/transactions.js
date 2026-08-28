@@ -1,7 +1,6 @@
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
-let categories = [];
 let currentMonth = null;
 let incomeRows = [];
 let incomeSort = { field: null, dir: "asc" };
@@ -487,42 +486,6 @@ function initEditMode() {
 }
 
 // ---------------------------------------------------------------------------
-// Categories
-// ---------------------------------------------------------------------------
-async function loadCategories() {
-    categories = await fetchJSON("/api/categories");
-}
-
-function buildCategoryDatalist() {
-    if (document.getElementById("category-list")) return;
-    const dl = document.createElement("datalist");
-    dl.id = "category-list";
-    categories.forEach((c) => {
-        const opt = document.createElement("option");
-        opt.value = c;
-        dl.appendChild(opt);
-    });
-    document.body.appendChild(dl);
-}
-
-// ---------------------------------------------------------------------------
-// Banks
-// ---------------------------------------------------------------------------
-function buildBankDatalist() {
-    if (document.getElementById("bank-list")) return;
-
-    const dl = document.createElement("datalist");
-    dl.id = "bank-list";
-
-	BANKS_LIST.forEach((b) => {
-        const opt = document.createElement("option");
-        opt.value = b;
-        dl.appendChild(opt);
-    });
-    document.body.appendChild(dl);
-}
-
-// ---------------------------------------------------------------------------
 // Month filter
 // ---------------------------------------------------------------------------
 function initMonthFilter() {
@@ -554,141 +517,21 @@ function initMonthFilter() {
     });
 }
 
-// ---------------------------------------------------------------------------
-// New transaction modal
-// ---------------------------------------------------------------------------
-function openNewTxModal(txType) {
-    const modal = document.getElementById("new-tx-modal");
-    const form = document.getElementById("new-tx-form");
-    const title = document.getElementById("modal-title");
-    const descLabel = document.getElementById("tx-form-description-label");
-    const typeInput = document.getElementById("tx-form-type");
-
-    form.reset();
-
-    if (txType === "income") {
-        title.textContent = "New Income";
-        descLabel.textContent = "Source";
-        typeInput.value = TX_TYPE_TRANSFER;
-    } else {
-        title.textContent = "New Expense";
-        descLabel.textContent = "Merchant";
-        typeInput.value = TX_TYPE_PURCHASE;
-    }
-
-    const now = new Date();
-    const localISO = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}T${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-    document.getElementById("tx-form-date").value = localISO;
-
-    modal.hidden = false;
-    document.getElementById("tx-form-amount").focus();
-}
-
-function closeNewTxModal() {
-    document.getElementById("new-tx-modal").hidden = true;
-}
-
-// Manual transactions have no bank-issued reference, but `reference`
-// participates in the dedup unique index, so give each one a unique value.
-function generateReference() {
-    return `MAN-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-}
-
-async function submitNewTx(e) {
-    e.preventDefault();
-
-    const type = document.getElementById("tx-form-type").value;
-    const amount = parseFloat(document.getElementById("tx-form-amount").value);
-    const date = document.getElementById("tx-form-date").value;
-    const description = document.getElementById("tx-form-description").value.trim();
-    const category = document.getElementById("tx-form-category").value.trim();
-    const bank = document.getElementById("tx-form-bank").value.trim();
-
-    if (isNaN(amount) || amount < 0) return;
-
-    const payload = {
-		type,
-		amount,
-		date,
-		person: getLoggedUser(),
-		reference: generateReference(),
-		bank
-	};
-
-    if (type === TX_TYPE_TRANSFER) {
-        payload.sender_bank = description || null;
-		payload.concept = TX_TYPE_TRANSFER;
-    } else {
-        payload.merchant = description || null;
-		payload.concept = description || null;
-    }
-
-    if (category) payload.category = category.toUpperCase();
-
-    const submitBtn = document.querySelector(".btn-modal-submit");
-    setButtonLoading(submitBtn, true);
-
-    try {
-        if (payload.category && !categories.some((c) => c.toUpperCase() === payload.category)) {
-            await apiFetch("/api/categories", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name: payload.category }),
-            });
-            categories.push(payload.category);
-        }
-
-        const res = await apiFetch("/api/transactions", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-        });
-
-        if (res.ok) {
-            closeNewTxModal();
-            showToast("Transaction created", "success");
-            const monthInput = document.getElementById("transactions-month");
-            loadTransactions(monthInput.value);
-        } else if (res.status === 409) {
-            showToast("Duplicate transaction", "error");
-        } else {
-            showToast("Failed to create transaction", "error");
-        }
-    } catch (err) {
-        showToast("Failed to create transaction", "error");
-    } finally {
-        setButtonLoading(submitBtn, false);
-    }
-}
-
-function initNewTxModal() {
-    document.addEventListener("click", (e) => {
-        const btn = e.target.closest(".btn-new-tx");
-        if (btn) {
-            openNewTxModal(btn.dataset.type);
-            return;
-        }
-    });
-
-    document.getElementById("modal-close").addEventListener("click", closeNewTxModal);
-    document.getElementById("modal-cancel").addEventListener("click", closeNewTxModal);
-    document.getElementById("new-tx-modal").addEventListener("click", (e) => {
-        if (e.target === e.currentTarget) closeNewTxModal();
-    });
-    document.getElementById("new-tx-form").addEventListener("submit", submitNewTx);
-}
+// The new-transaction modal (nav button, Ctrl/Cmd+K, and this page's
+// per-table "+ New" buttons) lives in common.js and is shared across every
+// page. After a successful create, it calls this hook so the visible month
+// refreshes with the new row.
+window.onTransactionCreated = () => {
+    const monthInput = document.getElementById("transactions-month");
+    loadTransactions(monthInput.value);
+};
 
 // ---------------------------------------------------------------------------
 // Bootstrap
 // ---------------------------------------------------------------------------
 if (requireAuth()) {
-    loadCategories().then(() => {
-        buildCategoryDatalist();
-        buildBankDatalist();
-        initMonthFilter();
-        initEditMode();
-        initNewTxModal();
-        initSort();
-        initFilter();
-    });
+    initMonthFilter();
+    initEditMode();
+    initSort();
+    initFilter();
 }

@@ -100,6 +100,177 @@ nav a[aria-current="page"] {
     border-color: var(--color-expense);
 }
 
+.btn-nav-new {
+    padding: var(--space-sm) var(--space-md);
+    background: var(--bg-input);
+    color: var(--color-income);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+    transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.btn-nav-new:hover {
+    background: var(--border);
+    border-color: var(--color-income);
+}
+
+/* --------------------------------------------------------------------------
+   New transaction modal (shared across all pages)
+   -------------------------------------------------------------------------- */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal-overlay[hidden] {
+    display: none;
+}
+
+.modal {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-lg);
+    width: 100%;
+    max-width: 420px;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.modal-header h3 {
+    font-size: 1rem;
+    color: var(--text-primary);
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.4rem;
+    cursor: pointer;
+    padding: 0 4px;
+}
+
+.modal-close:hover {
+    color: var(--text-primary);
+}
+
+.form-row {
+    margin-bottom: 14px;
+}
+
+.form-row label {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+}
+
+.form-row input {
+    width: 100%;
+    padding: 8px 12px;
+    background: var(--bg-input);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+    outline: none;
+    transition: border-color var(--transition-fast);
+}
+
+.form-row input:focus {
+    border-color: var(--color-income);
+}
+
+.form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.btn-modal-cancel {
+    padding: 8px 16px;
+    background: var(--bg-input);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 0.85rem;
+}
+
+.btn-modal-cancel:hover {
+    background: var(--border);
+    color: var(--text-primary);
+}
+
+.btn-modal-submit {
+    padding: 8px 16px;
+    background: var(--color-income);
+    color: var(--bg-body);
+    border: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.btn-modal-submit:hover {
+    background: #34d399;
+}
+
+/* Stage 1 of the new-transaction modal: pick Income or Expense before the form. */
+.tx-type-picker {
+    display: flex;
+    gap: var(--space-md);
+    margin-bottom: var(--space-sm);
+}
+
+.tx-type-btn {
+    flex: 1;
+    padding: var(--space-lg) var(--space-md);
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    font-size: 0.95rem;
+    font-weight: 600;
+    transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.tx-type-btn.income {
+    color: var(--color-income);
+}
+
+.tx-type-btn.income:hover {
+    background: var(--border);
+    border-color: var(--color-income);
+}
+
+.tx-type-btn.expense {
+    color: var(--color-expense);
+}
+
+.tx-type-btn.expense:hover {
+    background: var(--border);
+    border-color: var(--color-expense);
+}
+
 .chart-section {
     background: var(--bg-card);
     padding: var(--space-lg);
