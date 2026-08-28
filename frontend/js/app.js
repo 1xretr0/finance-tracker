@@ -133,9 +133,11 @@ async function loadBreakdownCharts(month) {
             maintainAspectRatio: false,
             cutout: "65%",
             plugins: {
-                legend: {
-                    position: "bottom",
-                    labels: { color: "#9a9a9a", boxWidth: 12, padding: 12 },
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => ` ${ctx.label}: ${formatAmount(ctx.parsed)} MXN`,
+                    },
                 },
             },
         },
@@ -165,9 +167,11 @@ async function loadBreakdownCharts(month) {
             maintainAspectRatio: false,
             cutout: "65%",
             plugins: {
-                legend: {
-                    position: "bottom",
-                    labels: { color: "#9a9a9a", boxWidth: 12, padding: 12 },
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => ` ${ctx.label}: ${formatAmount(ctx.parsed)} MXN`,
+                    },
                 },
             },
         },
