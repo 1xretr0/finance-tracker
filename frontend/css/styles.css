@@ -85,6 +85,67 @@ nav a[aria-current="page"] {
     letter-spacing: 0.5px;
 }
 
+/* --------------------------------------------------------------------------
+   Data-freshness indicator (1.8) & uncategorized nav badge (3.7)
+   -------------------------------------------------------------------------- */
+.sync-status {
+    margin-left: var(--space-sm);
+    font-size: 0.78rem;
+    color: var(--text-faint);
+}
+
+.sync-status.stale {
+    color: #facc15;
+}
+
+.nav-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    margin-left: 6px;
+    padding: 0 5px;
+    background: var(--color-expense);
+    color: var(--text-heading);
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 700;
+}
+
+/* --------------------------------------------------------------------------
+   Floating "+" button on narrow screens (6.1)
+   -------------------------------------------------------------------------- */
+.fab-new-tx {
+    display: none;
+    position: fixed;
+    right: var(--space-lg);
+    bottom: var(--space-lg);
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: var(--color-income);
+    color: var(--bg-body);
+    border: none;
+    font-size: 1.8rem;
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    z-index: 900;
+}
+
+.fab-new-tx:hover {
+    background: #34d399;
+}
+
+@media (max-width: 600px) {
+    .fab-new-tx {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+}
+
 .btn-logout {
     padding: var(--space-sm) var(--space-md);
     background: none;
@@ -234,6 +295,58 @@ nav a[aria-current="page"] {
     background: #34d399;
 }
 
+.btn-modal-delete {
+    margin-right: auto;
+    padding: 8px 16px;
+    background: none;
+    color: var(--color-expense);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 0.85rem;
+}
+
+.btn-modal-delete:hover {
+    background: rgba(248, 113, 113, 0.1);
+    border-color: var(--color-expense);
+}
+
+/* Income/expense toggle inside the edit form (distinct from the create-mode
+   tx-type-picker, which only appears before the form is shown). */
+.tx-type-toggle {
+    display: flex;
+    gap: var(--space-sm);
+}
+
+.tx-type-toggle-btn {
+    flex: 1;
+    padding: var(--space-sm) var(--space-md);
+    background: var(--bg-input);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+    transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+}
+
+.tx-type-toggle-btn:hover {
+    background: var(--border);
+}
+
+.tx-type-toggle-btn.income.active {
+    background: rgba(74, 222, 128, 0.15);
+    color: var(--color-income);
+    border-color: var(--color-income);
+}
+
+.tx-type-toggle-btn.expense.active {
+    background: rgba(248, 113, 113, 0.15);
+    color: var(--color-expense);
+    border-color: var(--color-expense);
+}
+
 /* Stage 1 of the new-transaction modal: pick Income or Expense before the form. */
 .tx-type-picker {
     display: flex;
@@ -288,23 +401,6 @@ nav a[aria-current="page"] {
 .chart-header h2 {
     font-size: 1rem;
     color: var(--text-secondary);
-}
-
-.year-nav {
-    display: flex;
-    align-items: center;
-    gap: 0;
-}
-
-.year-label {
-    padding: 6px 14px;
-    background: var(--bg-input);
-    color: var(--text-primary);
-    border: 1px solid var(--border);
-    font-size: 0.85rem;
-    font-weight: 600;
-    min-width: 60px;
-    text-align: center;
 }
 
 .breakdown-section {
@@ -417,101 +513,279 @@ nav a[aria-current="page"] {
 .breakdown-total.income { color: var(--color-income); }
 .breakdown-total.expense { color: var(--color-expense); }
 
-.overview-section {
+/* --------------------------------------------------------------------------
+   Overview page — global month toolbar (1.6)
+   -------------------------------------------------------------------------- */
+.page-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-lg);
+}
+
+.page-toolbar-title {
+    font-size: 1.1rem;
+    color: var(--text-heading);
+}
+
+/* --------------------------------------------------------------------------
+   KPI row (1.3, 2.3, 2.4)
+   -------------------------------------------------------------------------- */
+.kpi-section {
+    margin-bottom: var(--space-lg);
+}
+
+.kpi-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--space-md);
+}
+
+.kpi-tile {
+    background: var(--bg-card);
+    padding: var(--space-lg);
+    border-radius: var(--radius-lg);
+}
+
+.kpi-label {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: var(--space-sm);
+}
+
+.kpi-value {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--text-heading);
+}
+
+.kpi-value.income { color: var(--color-income); }
+.kpi-value.expense { color: var(--color-expense); }
+
+.kpi-sub {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    margin-top: var(--space-xs);
+}
+
+.kpi-sub.positive { color: var(--color-income); }
+.kpi-sub.negative { color: var(--color-expense); }
+
+/* --------------------------------------------------------------------------
+   Cash-flow + cumulative charts side by side (1.1, 1.2)
+   -------------------------------------------------------------------------- */
+.cashflow-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-lg);
+}
+
+.chart-subtitle {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    text-align: center;
+    margin-bottom: var(--space-sm);
+}
+
+/* --------------------------------------------------------------------------
+   Breakdown empty state (6.4)
+   -------------------------------------------------------------------------- */
+.breakdown-empty {
+    text-align: center;
+    padding: var(--space-xl) var(--space-md);
+    color: var(--text-muted);
+}
+
+.breakdown-empty p {
+    margin-bottom: var(--space-md);
+}
+
+/* --------------------------------------------------------------------------
+   Shared section header, loading & empty states (used by budgets, merchants,
+   recurring — 6.4)
+   -------------------------------------------------------------------------- */
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: var(--space-md);
+}
+
+.section-header h2 {
+    font-size: 1rem;
+    color: var(--text-secondary);
+}
+
+.section-header-sub {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.section-loading,
+.section-empty {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    padding: var(--space-lg) 0;
+    text-align: center;
+}
+
+.section-empty a {
+    color: var(--color-income);
+}
+
+.btn-empty-add {
+    background: none;
+    border: none;
+    color: var(--color-income);
+    cursor: pointer;
+    font-size: 0.85rem;
+    text-decoration: underline;
+    padding: 0;
+}
+
+/* --------------------------------------------------------------------------
+   Budgets (2.1)
+   -------------------------------------------------------------------------- */
+.budgets-section {
     background: var(--bg-card);
     padding: var(--space-lg);
     border-radius: var(--radius-lg);
     margin-bottom: var(--space-lg);
 }
 
-.overview-header {
+.budgets-list {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
-}
-
-.overview-header h2 {
-    font-size: 1rem;
-    color: var(--text-secondary);
-}
-
-.quarter-filter {
-    display: flex;
-    gap: 6px;
-}
-
-.quarter-btn {
-    padding: 6px 14px;
-    background: var(--bg-input);
-    color: var(--text-muted);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    font-size: 0.85rem;
-}
-
-.quarter-btn:hover {
-    background: var(--border);
-    color: #ccc;
-}
-
-.quarter-btn.active {
-    background: var(--color-income);
-    color: var(--bg-body);
-    border-color: var(--color-income);
-    font-weight: 600;
-}
-
-.overview-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    flex-direction: column;
     gap: var(--space-md);
 }
 
-.month-card {
-    background: var(--bg-elevated);
-    border-radius: var(--radius-md);
-    padding: 20px;
+.budget-row {
+    display: block;
+    text-decoration: none;
+    color: inherit;
 }
 
-.month-card .month-name {
+.budget-row-header {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    margin-bottom: 6px;
+}
+
+.budget-name {
+    color: var(--text-secondary);
+    font-weight: 600;
+}
+
+.budget-amounts {
+    color: var(--text-muted);
+}
+
+.budget-bar-track {
+    height: 8px;
+    background: var(--bg-input);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+
+.budget-bar-fill {
+    height: 100%;
+    background: var(--color-income);
+    border-radius: var(--radius-sm);
+}
+
+.budget-bar-fill.warn { background: #facc15; }
+.budget-bar-fill.over { background: var(--color-expense); }
+
+/* --------------------------------------------------------------------------
+   Top merchants & recurring (1.1, 2.2)
+   -------------------------------------------------------------------------- */
+.insights-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-lg);
+    margin-bottom: var(--space-lg);
+}
+
+.insight-panel {
+    background: var(--bg-card);
+    padding: var(--space-lg);
+    border-radius: var(--radius-lg);
+}
+
+.list-panel {
+    display: flex;
+    flex-direction: column;
+}
+
+.list-row {
+    display: flex;
+    justify-content: space-between;
+    padding: var(--space-sm) 0;
+    border-bottom: 1px solid var(--border-subtle);
+    text-decoration: none;
+    color: inherit;
+    font-size: 0.85rem;
+}
+
+.list-row:last-child {
+    border-bottom: none;
+}
+
+.list-row-name {
+    color: var(--text-primary);
+}
+
+.list-row-value.expense { color: var(--color-expense); }
+.list-row-value.income { color: var(--color-income); }
+
+/* --------------------------------------------------------------------------
+   Quarter + YTD summary (1.7)
+   -------------------------------------------------------------------------- */
+.summary-section {
+    margin-bottom: var(--space-lg);
+}
+
+.summary-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-lg);
+}
+
+.summary-card {
+    background: var(--bg-card);
+    padding: var(--space-lg);
+    border-radius: var(--radius-lg);
+}
+
+.summary-card h3 {
     font-size: 0.9rem;
     color: var(--text-secondary);
-    margin-bottom: 14px;
-    font-weight: 600;
+    margin-bottom: var(--space-md);
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
 
-.month-card .month-row {
+.summary-row {
     display: flex;
     justify-content: space-between;
     padding: 6px 0;
     font-size: 0.9rem;
-}
-
-.month-card .month-row .label {
     color: var(--text-muted);
 }
 
-.month-card .month-row .value {
-    font-weight: 500;
+.summary-row span:last-child {
+    font-weight: 600;
+    color: var(--text-heading);
 }
 
-.month-card .month-row.income .value { color: var(--color-income); }
-.month-card .month-row.expenses .value { color: var(--color-expense); }
-.month-card .month-row.balance .value { color: var(--text-heading); }
-.month-card .month-row.balance .value.negative { color: var(--color-expense); }
-
-.month-card .divider {
-    border: none;
-    border-top: 1px solid var(--border);
-    margin: var(--space-sm) 0;
-}
+.summary-row span.income { color: var(--color-income); }
+.summary-row span.expense { color: var(--color-expense); }
 
 @media (max-width: 1024px) {
-    .overview-grid {
+    .kpi-row {
         grid-template-columns: repeat(2, 1fr);
     }
 }
@@ -520,7 +794,13 @@ nav a[aria-current="page"] {
     .breakdown-charts {
         grid-template-columns: 1fr;
     }
-    .overview-grid {
+    .cashflow-grid {
+        grid-template-columns: 1fr;
+    }
+    .insights-grid {
+        grid-template-columns: 1fr;
+    }
+    .summary-grid {
         grid-template-columns: 1fr;
     }
     .chart-canvas-wrapper {
@@ -559,7 +839,7 @@ nav a[aria-current="page"] {
     }
     .chart-section,
     .breakdown-section,
-    .overview-section {
+    .budgets-section {
         padding: var(--space-md);
     }
     .chart-canvas-wrapper {
@@ -571,11 +851,6 @@ nav a[aria-current="page"] {
     .breakdown-total {
         font-size: 0.95rem;
     }
-    .year-label {
-        padding: 4px 10px;
-        font-size: 0.75rem;
-        min-width: 48px;
-    }
     .month-nav-btn {
         width: 26px;
         height: 26px;
@@ -586,12 +861,8 @@ nav a[aria-current="page"] {
         font-size: 0.75rem;
         height: 26px;
     }
-    .quarter-filter {
-        gap: 4px;
-    }
-    .quarter-btn {
-        padding: 4px 10px;
-        font-size: 0.75rem;
+    .kpi-row {
+        grid-template-columns: 1fr;
     }
 }
 

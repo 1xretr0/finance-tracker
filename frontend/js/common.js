@@ -109,8 +109,12 @@ function getCurrentQuarter() {
     return Math.floor(new Date().getMonth() / 3) + 1;
 }
 
+// Renders negatives as "-$1,234.00" (not "$-1,234.00") and always caps at 2
+// decimal places (6.5).
 function formatAmount(amount) {
-    return `$${amount.toLocaleString("en", { minimumFractionDigits: 2 })}`;
+    const sign = amount < 0 ? "-" : "";
+    const abs = Math.abs(amount);
+    return `${sign}$${abs.toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function getCurrentMonthStr() {
@@ -170,15 +174,16 @@ function setButtonLoading(btn, loading) {
 }
 
 // ---------------------------------------------------------------------------
-// New transaction modal (shared across every page — a persistent "+ New"
-// nav button and a Ctrl/Cmd+K shortcut both open this). The markup is
-// injected once here rather than duplicated in each HTML file; the
-// transactions page's per-table "+ New" buttons (`.btn-new-tx[data-type]`)
+// New/edit transaction modal (shared across every page — a persistent
+// "+ New" nav button and a Ctrl/Cmd+K shortcut both open this in create
+// mode; the transactions page opens it in edit mode by clicking a row). The
+// markup is injected once here rather than duplicated in each HTML file;
+// the transactions page's per-table "+ New" buttons (`.btn-new-tx[data-type]`)
 // reuse the same modal and skip straight to the form.
 // ---------------------------------------------------------------------------
 const NEW_TX_MODAL_HTML = `
     <div class="modal-overlay" id="new-tx-modal" hidden>
-        <div class="modal">
+        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
             <div class="modal-header">
                 <h3 id="modal-title">New Transaction</h3>
                 <button class="modal-close" id="modal-close">&times;</button>
@@ -188,7 +193,15 @@ const NEW_TX_MODAL_HTML = `
                 <button type="button" class="tx-type-btn expense" id="tx-type-expense">Expense</button>
             </div>
             <form id="new-tx-form" hidden>
+                <input type="hidden" id="tx-form-id">
                 <input type="hidden" id="tx-form-type">
+                <div class="form-row" id="tx-form-type-toggle-row" hidden>
+                    <label>Type</label>
+                    <div class="tx-type-toggle">
+                        <button type="button" class="tx-type-toggle-btn income" data-type="income">Income</button>
+                        <button type="button" class="tx-type-toggle-btn expense" data-type="expense">Expense</button>
+                    </div>
+                </div>
                 <div class="form-row">
                     <label for="tx-form-amount">Amount</label>
                     <input type="number" id="tx-form-amount" step="0.01" min="0" required>
@@ -209,7 +222,12 @@ const NEW_TX_MODAL_HTML = `
                     <label for="tx-form-bank">Bank</label>
                     <input type="text" id="tx-form-bank" list="bank-list" required>
                 </div>
+                <div class="form-row">
+                    <label for="tx-form-notes">Notes</label>
+                    <input type="text" id="tx-form-notes">
+                </div>
                 <div class="form-actions">
+                    <button type="button" class="btn-modal-delete" id="modal-delete" hidden>Delete</button>
                     <button type="button" class="btn-modal-cancel" id="modal-cancel">Cancel</button>
                     <button type="submit" class="btn-modal-submit">Save</button>
                 </div>
@@ -217,6 +235,15 @@ const NEW_TX_MODAL_HTML = `
         </div>
     </div>
 `;
+
+// Set while the modal is open in edit mode — the original transaction, used
+// to diff which fields actually changed before sending PUT /api/transactions.
+let editingTxOriginal = null;
+
+// The element that had focus right before the modal opened (6.3) — focus
+// returns here on close so keyboard/screen-reader users land back where
+// they started instead of at the top of the page.
+let modalOpener = null;
 
 // Categories are fetched once per page load purely to populate the datalist
 // and to validate what the user types — this form does not create new
@@ -258,10 +285,22 @@ function generateReference() {
     return `MAN-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 }
 
+// Clears any leftover edit-mode state so create-mode entry points (the
+// picker, or opening straight into a typed form) never inherit a stale
+// editing target, delete button, or type toggle from a previous edit.
+function resetModalToCreateMode() {
+    editingTxOriginal = null;
+    document.getElementById("tx-form-id").value = "";
+    document.getElementById("tx-form-type-toggle-row").hidden = true;
+    document.getElementById("modal-delete").hidden = true;
+}
+
 function openTxTypePicker() {
     const modal = document.getElementById("new-tx-modal");
     if (!modal) return;
+    if (modal.hidden) modalOpener = document.activeElement;
     document.getElementById("new-tx-form").reset();
+    resetModalToCreateMode();
     document.getElementById("modal-title").textContent = "New Transaction";
     document.getElementById("tx-type-picker").hidden = false;
     document.getElementById("new-tx-form").hidden = true;
@@ -276,7 +315,9 @@ function openNewTxModal(txType) {
     const descLabel = document.getElementById("tx-form-description-label");
     const typeInput = document.getElementById("tx-form-type");
 
+    if (modal.hidden) modalOpener = document.activeElement;
     form.reset();
+    resetModalToCreateMode();
 
     if (txType === "income") {
         title.textContent = "New Income";
@@ -298,34 +339,83 @@ function openNewTxModal(txType) {
     document.getElementById("tx-form-amount").focus();
 }
 
-function closeNewTxModal() {
-    document.getElementById("new-tx-modal").hidden = true;
+// Toggles the income/expense buttons inside the edit form (not the
+// create-mode picker) and relabels the description field to match.
+function setTypeToggleActive(kind) {
+    document.querySelectorAll(".tx-type-toggle-btn").forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.type === kind);
+    });
+    document.getElementById("tx-form-description-label").textContent = kind === "income" ? "Source" : "Merchant";
 }
 
-async function submitNewTx(e) {
-    e.preventDefault();
+// Opens the shared modal pre-filled with an existing transaction's fields
+// (4.6). `tx` is the full row already held by the caller (e.g. the
+// transactions page's cached income/expense arrays) — no fetch needed.
+function openEditTxModal(tx) {
+    const modal = document.getElementById("new-tx-modal");
+    const form = document.getElementById("new-tx-form");
+    const picker = document.getElementById("tx-type-picker");
 
+    modalOpener = document.activeElement;
+    form.reset();
+    editingTxOriginal = tx;
+    document.getElementById("tx-form-id").value = tx.id;
+    document.getElementById("tx-form-type").value = tx.type;
+    document.getElementById("tx-form-type-toggle-row").hidden = false;
+    document.getElementById("modal-delete").hidden = false;
+    document.getElementById("modal-title").textContent = "Edit Transaction";
+
+    const kind = tx.type === TX_TYPE_TRANSFER ? "income" : "expense";
+    setTypeToggleActive(kind);
+
+    document.getElementById("tx-form-amount").value = tx.amount;
+    document.getElementById("tx-form-date").value = (tx.date || "").slice(0, 16);
+    document.getElementById("tx-form-description").value =
+        kind === "income" ? (tx.sender_bank || tx.concept || "") : (tx.merchant || tx.dest_bank || "");
+    document.getElementById("tx-form-category").value = tx.category || "";
+    document.getElementById("tx-form-bank").value = tx.bank || "";
+    document.getElementById("tx-form-notes").value = tx.notes || "";
+
+    picker.hidden = true;
+    form.hidden = false;
+    modal.hidden = false;
+    document.getElementById("tx-form-amount").focus();
+}
+
+function closeNewTxModal() {
+    document.getElementById("new-tx-modal").hidden = true;
+    resetModalToCreateMode();
+    if (modalOpener && typeof modalOpener.focus === "function") modalOpener.focus();
+    modalOpener = null;
+}
+
+function readCategoryValue() {
+    const category = document.getElementById("tx-form-category").value.trim();
+    if (!category) return { ok: true, value: null };
+
+    // This form only accepts existing categories — new ones are created via
+    // /categorize. Reject anything that doesn't match (case-insensitive).
+    const upper = category.toUpperCase();
+    const known = (window.__newTxCategories || []).some((c) => c.toUpperCase() === upper);
+    if (!known) {
+        showToast("Unknown category", "error");
+        return { ok: false };
+    }
+    return { ok: true, value: upper };
+}
+
+async function submitCreateTx() {
     const type = document.getElementById("tx-form-type").value;
     const amount = parseFloat(document.getElementById("tx-form-amount").value);
     const date = document.getElementById("tx-form-date").value;
     const description = document.getElementById("tx-form-description").value.trim();
-    const category = document.getElementById("tx-form-category").value.trim();
     const bank = document.getElementById("tx-form-bank").value.trim();
+    const notes = document.getElementById("tx-form-notes").value.trim();
 
     if (isNaN(amount) || amount < 0) return;
 
-    // This form only accepts existing categories — new ones are created via
-    // /categorize. Reject anything that doesn't match (case-insensitive).
-    let categoryValue = null;
-    if (category) {
-        const upper = category.toUpperCase();
-        const known = (window.__newTxCategories || []).some((c) => c.toUpperCase() === upper);
-        if (!known) {
-            showToast("Unknown category", "error");
-            return;
-        }
-        categoryValue = upper;
-    }
+    const category = readCategoryValue();
+    if (!category.ok) return;
 
     const payload = {
         type,
@@ -334,6 +424,7 @@ async function submitNewTx(e) {
         person: getLoggedUser(),
         reference: generateReference(),
         bank,
+        notes: notes || null,
     };
 
     if (type === TX_TYPE_TRANSFER) {
@@ -344,7 +435,7 @@ async function submitNewTx(e) {
         payload.concept = description || null;
     }
 
-    if (categoryValue) payload.category = categoryValue;
+    if (category.value) payload.category = category.value;
 
     const submitBtn = document.querySelector(".btn-modal-submit");
     setButtonLoading(submitBtn, true);
@@ -361,7 +452,7 @@ async function submitNewTx(e) {
             showToast("Transaction created", "success");
             // Pages that display transactions (e.g. /transactions) define this
             // hook to refresh themselves; other pages simply do nothing.
-            window.onTransactionCreated?.();
+            window.onTransactionChanged?.();
         } else if (res.status === 409) {
             showToast("Duplicate transaction", "error");
         } else {
@@ -372,6 +463,110 @@ async function submitNewTx(e) {
     } finally {
         setButtonLoading(submitBtn, false);
     }
+}
+
+// Sends only the fields that actually changed (4.6, 4.7). The description
+// is written to sender_bank for income and merchant for expenses — the
+// field the transactions page actually reads back on reload — which is
+// what fixes the "income edit reverts on reload" bug (4.7).
+async function submitEditTx(id) {
+    const original = editingTxOriginal;
+    if (!original) return;
+
+    const originalKind = original.type === TX_TYPE_TRANSFER ? "income" : "expense";
+    const activeToggle = document.querySelector(".tx-type-toggle-btn.active");
+    const newKind = activeToggle ? activeToggle.dataset.type : originalKind;
+    const kindChanged = newKind !== originalKind;
+
+    const amount = parseFloat(document.getElementById("tx-form-amount").value);
+    const date = document.getElementById("tx-form-date").value;
+    const description = document.getElementById("tx-form-description").value.trim();
+    const bank = document.getElementById("tx-form-bank").value.trim();
+    const notes = document.getElementById("tx-form-notes").value.trim();
+
+    if (isNaN(amount) || amount < 0) return;
+
+    const category = readCategoryValue();
+    if (!category.ok) return;
+
+    const payload = {};
+
+    if (Math.abs(amount - original.amount) > 0.0001) payload.amount = amount;
+    if (date && date !== (original.date || "").slice(0, 16)) payload.date = date;
+    if (bank && bank !== original.bank) payload.bank = bank;
+
+    const notesValue = notes || null;
+    if (notesValue !== (original.notes || null)) payload.notes = notesValue;
+
+    const originalCategory = original.category || null;
+    if (category.value !== originalCategory) payload.category = category.value;
+
+    const descriptionField = newKind === "income" ? "sender_bank" : "merchant";
+    if (kindChanged) {
+        payload.type = newKind === "income" ? TX_TYPE_TRANSFER : TX_TYPE_PURCHASE;
+        payload[descriptionField] = description || null;
+    } else {
+        const originalDescription = originalKind === "income"
+            ? (original.sender_bank || original.concept || "")
+            : (original.merchant || original.dest_bank || "");
+        if (description !== originalDescription) payload[descriptionField] = description || null;
+    }
+
+    if (Object.keys(payload).length === 0) {
+        closeNewTxModal();
+        return;
+    }
+
+    const submitBtn = document.querySelector(".btn-modal-submit");
+    setButtonLoading(submitBtn, true);
+
+    try {
+        const res = await apiFetch(`/api/transactions/${id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+        });
+
+        if (res.ok) {
+            closeNewTxModal();
+            showToast("Transaction updated", "success");
+            window.onTransactionChanged?.();
+        } else if (res.status === 409) {
+            showToast("Duplicate transaction", "error");
+        } else {
+            showToast("Failed to update transaction", "error");
+        }
+    } catch (err) {
+        showToast("Failed to update transaction", "error");
+    } finally {
+        setButtonLoading(submitBtn, false);
+    }
+}
+
+// Delete stays instant (no confirmation) — matches the rest of the app.
+async function deleteEditingTx() {
+    if (!editingTxOriginal) return;
+    const id = editingTxOriginal.id;
+
+    try {
+        const res = await apiFetch(`/api/transactions/${id}`, { method: "DELETE" });
+        if (res.ok) {
+            closeNewTxModal();
+            showToast("Transaction deleted", "success");
+            window.onTransactionChanged?.();
+        } else {
+            showToast("Failed to delete transaction", "error");
+        }
+    } catch (err) {
+        showToast("Failed to delete transaction", "error");
+    }
+}
+
+async function submitNewTx(e) {
+    e.preventDefault();
+    const id = document.getElementById("tx-form-id").value;
+    if (id) await submitEditTx(parseInt(id, 10));
+    else await submitCreateTx();
 }
 
 // Injects the nav button + modal markup once the header exists, then wires
@@ -393,15 +588,32 @@ function initNewTxUI() {
         document.body.insertAdjacentHTML("beforeend", NEW_TX_MODAL_HTML);
     }
 
+    // Floating "+" button — only visible on narrow (<600px) screens, where
+    // the nav's "+ New" button wraps out of easy reach (6.1).
+    if (!document.getElementById("fab-new-tx")) {
+        const fab = document.createElement("button");
+        fab.type = "button";
+        fab.id = "fab-new-tx";
+        fab.className = "fab-new-tx";
+        fab.setAttribute("aria-label", "New transaction");
+        fab.textContent = "+";
+        fab.addEventListener("click", () => openTxTypePicker());
+        document.body.appendChild(fab);
+    }
+
     // Wiring must happen after injection — these elements don't exist before this point.
     document.getElementById("modal-close").addEventListener("click", closeNewTxModal);
     document.getElementById("modal-cancel").addEventListener("click", closeNewTxModal);
+    document.getElementById("modal-delete").addEventListener("click", deleteEditingTx);
     document.getElementById("new-tx-modal").addEventListener("click", (e) => {
         if (e.target === e.currentTarget) closeNewTxModal();
     });
     document.getElementById("new-tx-form").addEventListener("submit", submitNewTx);
     document.getElementById("tx-type-income").addEventListener("click", () => openNewTxModal("income"));
     document.getElementById("tx-type-expense").addEventListener("click", () => openNewTxModal("expense"));
+    document.querySelectorAll(".tx-type-toggle-btn").forEach((btn) => {
+        btn.addEventListener("click", () => setTypeToggleActive(btn.dataset.type));
+    });
 
     loadCategories().then((cats) => {
         window.__newTxCategories = cats;
@@ -440,4 +652,95 @@ document.addEventListener("keydown", (e) => {
     openTxTypePicker();
 });
 
+// Esc closes the modal, and Tab/Shift+Tab stay trapped inside it while
+// open (6.3) — otherwise keyboard focus could silently escape to page
+// content hidden behind the overlay.
+document.addEventListener("keydown", (e) => {
+    const modal = document.getElementById("new-tx-modal");
+    if (!modal || modal.hidden) return;
+
+    if (e.key === "Escape") {
+        closeNewTxModal();
+        return;
+    }
+
+    if (e.key !== "Tab") return;
+    const focusable = Array.from(
+        modal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')
+    ).filter((el) => !el.disabled && el.offsetParent !== null);
+    if (focusable.length === 0) return;
+
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+    }
+});
+
 document.addEventListener("DOMContentLoaded", initNewTxUI);
+
+// ---------------------------------------------------------------------------
+// Shared header chrome: data-freshness indicator (1.8) and an uncategorized
+// count badge on the Categorize nav link (3.7). Both come from one
+// /api/status call so pages that don't need auth (e.g. /login, which has
+// no header) simply skip this via the `nav` guard.
+// ---------------------------------------------------------------------------
+function renderSyncStatus(el, lastSynced) {
+    if (!lastSynced) {
+        el.textContent = "Never synced";
+        el.title = "";
+        el.classList.remove("stale");
+        return;
+    }
+
+    const synced = new Date(lastSynced);
+    const diffMs = Date.now() - synced.getTime();
+    const diffHours = diffMs / 3600000;
+    const diffDays = diffHours / 24;
+
+    let label;
+    if (diffHours < 1) label = "Synced just now";
+    else if (diffHours < 24) label = `Synced ${Math.floor(diffHours)}h ago`;
+    else label = `Synced ${Math.floor(diffDays)}d ago`;
+
+    el.textContent = label;
+    el.title = synced.toLocaleString();
+    el.classList.toggle("stale", diffDays > 3);
+}
+
+async function initHeaderChrome() {
+    const nav = document.querySelector("header nav");
+    if (!nav) return;
+
+    const statusEl = document.createElement("span");
+    statusEl.className = "sync-status";
+    statusEl.id = "sync-status";
+    const userEl = document.getElementById("logged-user");
+    if (userEl) nav.insertBefore(statusEl, userEl);
+    else nav.appendChild(statusEl);
+
+    let status;
+    try {
+        status = await fetchJSON("/api/status");
+    } catch (err) {
+        return;
+    }
+
+    renderSyncStatus(statusEl, status.last_synced);
+
+    if (status.uncategorized > 0) {
+        const link = nav.querySelector('a[href="/categorize"]');
+        if (link) {
+            const badge = document.createElement("span");
+            badge.className = "nav-badge";
+            badge.textContent = status.uncategorized;
+            link.appendChild(badge);
+        }
+    }
+}
+
+document.addEventListener("DOMContentLoaded", initHeaderChrome);

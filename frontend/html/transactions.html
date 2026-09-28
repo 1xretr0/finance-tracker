@@ -4,6 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Transactions — Finance Tracker</title>
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#121212">
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="stylesheet" href="/css/styles.css">
     <link rel="stylesheet" href="/css/transactions.css">
 </head>
@@ -14,6 +19,7 @@
             <a href="/">Overview</a>
             <a href="/categorize">Categorize</a>
             <a href="/transactions" class="active" aria-current="page">Transactions</a>
+            <a href="/settings">Settings</a>
             <span class="header-user" id="logged-user"></span>
             <button class="btn-logout" title="Log out">Log out</button>
         </nav>
@@ -21,11 +27,22 @@
 
     <main>
         <div class="transactions-header">
-            <h2>Transaction Details</h2>
-            <div class="month-nav">
-                <button class="month-nav-btn" id="month-prev" aria-label="Previous month">&#9664;</button>
-                <input type="month" id="transactions-month">
-                <button class="month-nav-btn" id="month-next" aria-label="Next month">&#9654;</button>
+            <div class="transactions-header-top">
+                <h2>Transaction Details</h2>
+                <div class="month-nav">
+                    <button class="month-nav-btn" id="month-prev" aria-label="Previous month">&#9664;</button>
+                    <input type="month" id="transactions-month">
+                    <button class="month-nav-btn" id="month-next" aria-label="Next month">&#9654;</button>
+                </div>
+            </div>
+            <div class="transactions-filters">
+                <select id="bank-filter" aria-label="Filter by bank"></select>
+                <select id="person-filter" aria-label="Filter by person" hidden></select>
+                <div class="active-filters" id="active-filters"></div>
+                <div class="header-actions">
+                    <span class="month-net" id="month-net"></span>
+                    <button type="button" class="btn-export" id="export-csv-btn">Export CSV</button>
+                </div>
             </div>
         </div>
 
@@ -33,68 +50,54 @@
             <section class="table-section" id="income-section">
                 <div class="table-section-header">
                     <h3>Income</h3>
-                    <div class="table-section-actions">
-                        <button class="btn-new-tx" data-type="income">+ New</button>
-                        <button class="btn-edit-table" data-table="income">Edit</button>
-                        <div class="sort-wrapper">
-                            <button class="btn-sort-table" id="income-sort-btn" aria-haspopup="true" aria-expanded="false">Sort</button>
-                            <div class="sort-menu" id="income-sort-menu" hidden>
-                                <button class="sort-option" data-field="date">Date</button>
-                                <button class="sort-option" data-field="amount">Amount</button>
-                                <button class="sort-option" data-field="source">Source</button>
-                                <button class="sort-option" data-field="category">Category</button>
-                            </div>
-                        </div>
-                    </div>
+                    <button class="btn-new-tx" data-type="income">+ New</button>
+                </div>
+                <div class="table-search">
+                    <input type="text" id="income-search" placeholder="Search income…">
                 </div>
                 <table id="income-table">
                     <thead>
                         <tr>
-                            <th class="col-selector"></th>
-                            <th>Date</th>
-                            <th>Amount</th>
-                            <th>Source</th>
-                            <th>Category</th>
-                            <th class="col-actions"></th>
+                            <th class="sortable" data-field="date" aria-sort="none">Date</th>
+                            <th class="sortable" data-field="amount" aria-sort="none">Amount</th>
+                            <th class="sortable" data-field="source" aria-sort="none">Source</th>
+                            <th class="sortable" data-field="category" aria-sort="none">Category</th>
                         </tr>
                     </thead>
                     <tbody></tbody>
+                    <tfoot>
+                        <tr>
+                            <td id="income-count" colspan="3"></td>
+                            <td id="income-sum" class="amount-income"></td>
+                        </tr>
+                    </tfoot>
                 </table>
             </section>
 
             <section class="table-section" id="expense-section">
                 <div class="table-section-header">
                     <h3>Expenses</h3>
-                    <div class="table-section-actions">
-                        <button class="btn-new-tx" data-type="expense">+ New</button>
-                        <button class="btn-edit-table" data-table="expense">Edit</button>
-                        <div class="filter-wrapper">
-                            <button class="btn-filter-table" id="expense-filter-btn" aria-haspopup="true" aria-expanded="false">Filter</button>
-                            <div class="filter-menu" id="expense-filter-menu" hidden>
-                                <div class="filter-fields">
-                                    <button class="filter-option" data-field="date">Date</button>
-                                    <button class="filter-option" data-field="amount">Amount</button>
-                                    <button class="filter-option" data-field="description">Description</button>
-                                    <button class="filter-option" data-field="category">Category</button>
-                                </div>
-                                <input type="text" class="filter-input" id="expense-filter-input" placeholder="Select a column first" disabled>
-                                <button class="filter-clear" id="expense-filter-clear">Clear filter</button>
-                            </div>
-                        </div>
-                    </div>
+                    <button class="btn-new-tx" data-type="expense">+ New</button>
+                </div>
+                <div class="table-search">
+                    <input type="text" id="expense-search" placeholder="Search expenses…">
                 </div>
                 <table id="expense-table">
                     <thead>
                         <tr>
-                            <th class="col-selector"></th>
-                            <th>Date</th>
-                            <th>Amount</th>
-                            <th>Description</th>
-                            <th>Category</th>
-                            <th class="col-actions"></th>
+                            <th class="sortable" data-field="date" aria-sort="none">Date</th>
+                            <th class="sortable" data-field="amount" aria-sort="none">Amount</th>
+                            <th class="sortable" data-field="description" aria-sort="none">Description</th>
+                            <th class="sortable" data-field="category" aria-sort="none">Category</th>
                         </tr>
                     </thead>
                     <tbody></tbody>
+                    <tfoot>
+                        <tr>
+                            <td id="expense-count" colspan="3"></td>
+                            <td id="expense-sum" class="amount-expense"></td>
+                        </tr>
+                    </tfoot>
                 </table>
             </section>
         </div>

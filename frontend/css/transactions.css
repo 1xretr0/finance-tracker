@@ -2,15 +2,94 @@
    Page header
    -------------------------------------------------------------------------- */
 .transactions-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
     margin-bottom: var(--space-lg);
 }
 
-.transactions-header h2 {
+.transactions-header-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-md);
+}
+
+.transactions-header-top h2 {
     font-size: 1rem;
     color: var(--text-secondary);
+}
+
+.transactions-filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.transactions-filters select {
+    padding: 6px 10px;
+    background: var(--bg-input);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 0.8rem;
+}
+
+.active-filters {
+    display: flex;
+    gap: var(--space-xs);
+}
+
+.filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: var(--bg-input);
+    color: var(--color-income);
+    border: 1px solid var(--color-income);
+    border-radius: var(--radius-lg);
+    font-size: 0.78rem;
+    font-weight: 600;
+}
+
+.filter-chip-remove {
+    background: none;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+    font-size: 0.9rem;
+    line-height: 1;
+    padding: 0;
+}
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    margin-left: auto;
+}
+
+.month-net {
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.month-net.income { color: var(--color-income); }
+.month-net.expense { color: var(--color-expense); }
+
+.btn-export {
+    padding: 6px 14px;
+    background: var(--bg-input);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 0.8rem;
+    transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.btn-export:hover {
+    background: var(--border);
+    color: var(--text-primary);
 }
 
 /* --------------------------------------------------------------------------
@@ -35,7 +114,50 @@
     color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.5px;
+}
+
+.table-section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     margin-bottom: var(--space-md);
+}
+
+.table-search {
+    margin-bottom: var(--space-sm);
+}
+
+.table-search input {
+    width: 100%;
+    padding: 8px 12px;
+    background: var(--bg-input);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+    outline: none;
+    transition: border-color var(--transition-fast);
+}
+
+.table-search input:focus {
+    border-color: var(--color-income);
+}
+
+.btn-new-tx {
+    padding: 5px 14px;
+    background: var(--bg-input);
+    color: var(--color-income);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-weight: 600;
+    transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.btn-new-tx:hover {
+    background: var(--border);
+    border-color: var(--color-income);
 }
 
 /* --------------------------------------------------------------------------
@@ -60,12 +182,65 @@ th {
     font-size: 0.75rem;
 }
 
+th.sortable {
+    cursor: pointer;
+    user-select: none;
+    transition: color var(--transition-fast);
+}
+
+th.sortable:hover {
+    color: var(--text-secondary);
+}
+
+th.sortable[aria-sort="ascending"],
+th.sortable[aria-sort="descending"] {
+    color: var(--color-income);
+}
+
+th.sortable[aria-sort="ascending"]::after {
+    content: "\2191";
+    margin-left: 4px;
+}
+
+th.sortable[aria-sort="descending"]::after {
+    content: "\2193";
+    margin-left: 4px;
+}
+
 td {
     color: var(--text-primary);
 }
 
+tbody tr[data-id] {
+    cursor: pointer;
+    transition: background var(--transition-fast);
+}
+
+tbody tr[data-id]:hover,
+tbody tr[data-id]:focus-visible {
+    background: var(--bg-elevated);
+}
+
 .amount-income { color: var(--color-income); }
 .amount-expense { color: var(--color-expense); }
+
+.cell-description {
+    max-width: 220px;
+}
+
+.description-main {
+    color: var(--text-primary);
+}
+
+.description-sub {
+    color: var(--text-faint);
+    font-size: 0.75rem;
+    margin-top: 2px;
+}
+
+.notes-marker {
+    font-size: 0.8rem;
+}
 
 .category-tag {
     background: var(--bg-input);
@@ -81,385 +256,11 @@ td {
     padding: var(--space-lg);
 }
 
-/* --------------------------------------------------------------------------
-   Section header & action buttons (New / Edit / Sort / Filter)
-   -------------------------------------------------------------------------- */
-.table-section-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: var(--space-md);
-}
-
-.table-section-header h3 {
-    margin-bottom: 0;
-}
-
-.table-section-actions {
-    display: flex;
-    gap: var(--space-sm);
-}
-
-.btn-new-tx {
-    padding: 5px 14px;
-    background: var(--bg-input);
-    color: var(--color-income);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    font-size: 0.8rem;
+tfoot td {
+    color: var(--text-muted);
     font-weight: 600;
-    transition: background var(--transition-fast), border-color var(--transition-fast);
-}
-
-.btn-new-tx:hover {
-    background: var(--border);
-    border-color: var(--color-income);
-}
-
-.btn-edit-table {
-    padding: 5px 14px;
-    background: var(--bg-input);
-    color: var(--text-muted);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    font-size: 0.8rem;
-    transition: background var(--transition-fast), color var(--transition-fast);
-}
-
-.btn-edit-table:hover {
-    background: var(--border);
-    color: var(--text-primary);
-}
-
-.btn-edit-table.active {
-    background: var(--color-expense);
-    color: var(--text-heading);
-    border-color: var(--color-expense);
-}
-
-.btn-sort-table {
-    padding: 5px 14px;
-    background: var(--bg-input);
-    color: var(--text-muted);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    font-size: 0.8rem;
-    transition: background var(--transition-fast), color var(--transition-fast);
-}
-
-.btn-sort-table:hover {
-    background: var(--border);
-    color: var(--text-primary);
-}
-
-.btn-sort-table.active {
-    color: var(--color-income);
-    border-color: var(--color-income);
-}
-
-.btn-filter-table {
-    padding: 5px 14px;
-    background: var(--bg-input);
-    color: var(--text-muted);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    font-size: 0.8rem;
-    transition: background var(--transition-fast), color var(--transition-fast);
-}
-
-.btn-filter-table:hover {
-    background: var(--border);
-    color: var(--text-primary);
-}
-
-.btn-filter-table.active {
-    color: var(--color-expense);
-    border-color: var(--color-expense);
-}
-
-/* --------------------------------------------------------------------------
-   Sort menu
-   -------------------------------------------------------------------------- */
-.sort-wrapper {
-    position: relative;
-}
-
-.sort-menu {
-    position: absolute;
-    top: calc(100% + 4px);
-    right: 0;
-    z-index: 10;
-    display: flex;
-    flex-direction: column;
-    min-width: 140px;
-    padding: 4px;
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-}
-
-.sort-menu[hidden] {
-    display: none;
-}
-
-.sort-option {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 6px 10px;
-    background: none;
-    border: none;
-    border-radius: var(--radius-sm);
-    color: var(--text-secondary);
-    font-size: 0.8rem;
-    text-align: left;
-    cursor: pointer;
-    transition: background var(--transition-fast), color var(--transition-fast);
-}
-
-.sort-option:hover {
-    background: var(--bg-input);
-    color: var(--text-primary);
-}
-
-.sort-option.active {
-    color: var(--color-income);
-}
-
-.sort-option.active[data-dir="asc"]::after {
-    content: "\2191";
-}
-
-.sort-option.active[data-dir="desc"]::after {
-    content: "\2193";
-}
-
-/* --------------------------------------------------------------------------
-   Filter menu
-   -------------------------------------------------------------------------- */
-.filter-wrapper {
-    position: relative;
-}
-
-.filter-menu {
-    position: absolute;
-    top: calc(100% + 4px);
-    right: 0;
-    z-index: 10;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    min-width: 200px;
-    padding: 8px;
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-}
-
-.filter-menu[hidden] {
-    display: none;
-}
-
-.filter-fields {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-}
-
-.filter-option {
-    flex: 1 1 auto;
-    padding: 5px 10px;
-    background: var(--bg-input);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    color: var(--text-secondary);
-    font-size: 0.78rem;
-    text-align: center;
-    cursor: pointer;
-    transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
-}
-
-.filter-option:hover {
-    background: var(--border);
-    color: var(--text-primary);
-}
-
-.filter-option.active {
-    color: var(--color-expense);
-    border-color: var(--color-expense);
-}
-
-.filter-input {
-    width: 100%;
-    padding: 6px 10px;
-    background: var(--bg-input);
-    color: var(--text-primary);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    font-size: 0.8rem;
-    outline: none;
-    transition: border-color var(--transition-fast);
-}
-
-.filter-input:focus {
-    border-color: var(--color-expense);
-}
-
-.filter-input:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-.filter-clear {
-    padding: 5px 10px;
-    background: none;
-    border: none;
-    border-radius: var(--radius-sm);
-    color: var(--text-muted);
-    font-size: 0.78rem;
-    text-align: center;
-    cursor: pointer;
-    transition: background var(--transition-fast), color var(--transition-fast);
-}
-
-.filter-clear:hover {
-    background: var(--bg-input);
-    color: var(--text-primary);
-}
-
-/* --------------------------------------------------------------------------
-   Edit mode — selector & action columns
-   -------------------------------------------------------------------------- */
-.col-selector,
-.col-actions {
-    width: 0;
-    padding: 0;
-    overflow: hidden;
-    transition: width 0.2s;
-}
-
-.edit-mode .col-selector {
-    width: 36px;
-    padding: 10px 8px;
-}
-
-.edit-mode .col-actions {
-    width: 70px;
-    padding: 10px 8px;
-}
-
-.cell-selector {
-    width: 0;
-    padding: 0;
-    overflow: hidden;
-    text-align: center;
-    transition: width 0.2s, padding 0.2s;
-}
-
-.edit-mode .cell-selector {
-    width: 36px;
-    padding: 10px 8px;
-}
-
-.cell-actions {
-    width: 0;
-    padding: 0;
-    overflow: hidden;
-    text-align: center;
-    white-space: nowrap;
-    transition: width 0.2s, padding 0.2s;
-}
-
-.edit-mode .cell-actions {
-    width: 70px;
-    padding: 10px 8px;
-}
-
-/* --------------------------------------------------------------------------
-   Edit mode — row selection
-   -------------------------------------------------------------------------- */
-.row-selector {
-    display: inline-block;
-    width: 16px;
-    height: 16px;
-    border: 2px solid var(--text-faint);
-    border-radius: 50%;
-    cursor: pointer;
-    transition: border-color var(--transition-fast), background var(--transition-fast);
-}
-
-.row-selector:hover {
-    border-color: var(--color-income);
-}
-
-tr.row-selected .row-selector {
-    border-color: var(--color-income);
-    background: var(--color-income);
-}
-
-tr.row-selected {
-    background: rgba(74, 222, 128, 0.05);
-}
-
-/* --------------------------------------------------------------------------
-   Edit mode — inline inputs & row actions
-   -------------------------------------------------------------------------- */
-.inline-edit-input {
-    width: 100%;
-    padding: 4px 8px;
-    background: #1a1a1a;
-    color: var(--text-primary);
-    border: 1px solid #444;
-    border-radius: 4px;
-    font-size: 0.85rem;
-    outline: none;
-    transition: border-color var(--transition-fast);
-}
-
-.inline-edit-input:focus {
-    border-color: var(--color-income);
-}
-
-.inline-edit-input.amount-income {
-    color: var(--color-income);
-}
-
-.inline-edit-input.amount-expense {
-    color: var(--color-expense);
-}
-
-.btn-save-row,
-.btn-delete-row {
-    background: none;
-    border: none;
-    cursor: pointer;
-    font-size: 1rem;
-    padding: 2px 6px;
-    border-radius: 4px;
-    transition: background var(--transition-fast);
-}
-
-.btn-save-row {
-    color: var(--color-income);
-}
-
-.btn-save-row:hover {
-    background: rgba(74, 222, 128, 0.15);
-}
-
-.btn-delete-row {
-    color: var(--text-muted);
-}
-
-.btn-delete-row:hover {
-    color: var(--color-expense);
-    background: rgba(248, 113, 113, 0.1);
+    border-bottom: none;
+    border-top: 2px solid var(--border);
 }
 
 /* --------------------------------------------------------------------------
@@ -472,13 +273,20 @@ tr.row-selected {
     th, td {
         padding: 8px 8px;
         font-size: 0.8rem;
-        white-space: nowrap;
+    }
+    .cell-description {
+        max-width: 160px;
     }
 }
 
-@media (max-width: 480px) {
-    .sort-menu,
-    .filter-menu {
-        max-width: calc(100vw - 32px);
+@media (max-width: 600px) {
+    .transactions-header-top {
+        flex-wrap: wrap;
+        gap: var(--space-sm);
+    }
+    .header-actions {
+        margin-left: 0;
+        width: 100%;
+        justify-content: space-between;
     }
 }

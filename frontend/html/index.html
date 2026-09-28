@@ -20,30 +20,40 @@
     </header>
 
     <main>
+        <div class="page-toolbar">
+            <h2 class="page-toolbar-title" id="selected-month-label"></h2>
+            <div class="month-nav">
+                <button class="month-nav-btn" id="ov-month-prev" aria-label="Previous month">&#9664;</button>
+                <input type="month" id="ov-month">
+                <button class="month-nav-btn" id="ov-month-next" aria-label="Next month">&#9654;</button>
+            </div>
+        </div>
+
+        <section class="kpi-section">
+            <div class="kpi-row" id="kpi-row"></div>
+        </section>
+
         <section class="chart-section">
             <div class="chart-header">
-                <h2>Monthly Savings</h2>
-                <div class="year-nav">
-                    <button class="month-nav-btn" id="year-prev" aria-label="Previous year">&#9664;</button>
-                    <span class="year-label" id="savings-year"></span>
-                    <button class="month-nav-btn" id="year-next" aria-label="Next year">&#9654;</button>
-                </div>
+                <h2>Cash Flow</h2>
             </div>
-            <div class="chart-canvas-wrapper">
-                <canvas id="savings-chart"></canvas>
+            <div class="cashflow-grid">
+                <div class="chart-canvas-wrapper">
+                    <canvas id="cashflow-chart"></canvas>
+                </div>
+                <div class="chart-canvas-wrapper">
+                    <h3 class="chart-subtitle">Net balance (cumulative)</h3>
+                    <canvas id="savings-chart"></canvas>
+                </div>
             </div>
         </section>
 
         <section class="breakdown-section">
             <div class="breakdown-header">
                 <h2>Monthly Breakdown</h2>
-                <div class="month-nav">
-                    <button class="month-nav-btn" id="month-prev" aria-label="Previous month">&#9664;</button>
-                    <input type="month" id="breakdown-month">
-                    <button class="month-nav-btn" id="month-next" aria-label="Next month">&#9654;</button>
-                </div>
             </div>
-            <div class="breakdown-charts">
+            <div class="breakdown-empty" id="breakdown-empty" hidden></div>
+            <div class="breakdown-charts" id="breakdown-charts">
                 <div class="breakdown-chart-container">
                     <h3>Income</h3>
                     <div class="breakdown-chart-wrapper">
@@ -61,17 +71,34 @@
             </div>
         </section>
 
-        <section class="overview-section">
-            <div class="overview-header">
-                <h2>Savings Overview</h2>
-                <div class="quarter-filter">
-                    <button class="quarter-btn active" data-quarter="1">Q1</button>
-                    <button class="quarter-btn" data-quarter="2">Q2</button>
-                    <button class="quarter-btn" data-quarter="3">Q3</button>
-                    <button class="quarter-btn" data-quarter="4">Q4</button>
-                </div>
+        <section class="budgets-section">
+            <div class="section-header">
+                <h2>Budgets</h2>
             </div>
-            <div class="overview-grid" id="overview-grid"></div>
+            <div class="budgets-list" id="budgets-list"></div>
+        </section>
+
+        <section class="insights-grid">
+            <div class="insight-panel" id="merchants-panel">
+                <div class="section-header">
+                    <h2>Top Merchants</h2>
+                </div>
+                <div class="list-panel" id="merchants-list"></div>
+            </div>
+            <div class="insight-panel" id="recurring-panel">
+                <div class="section-header">
+                    <h2>Recurring</h2>
+                    <span class="section-header-sub" id="recurring-total"></span>
+                </div>
+                <div class="list-panel" id="recurring-list"></div>
+            </div>
+        </section>
+
+        <section class="summary-section">
+            <div class="summary-grid">
+                <div class="summary-card" id="quarter-summary"></div>
+                <div class="summary-card" id="ytd-summary"></div>
+            </div>
         </section>
     </main>
 

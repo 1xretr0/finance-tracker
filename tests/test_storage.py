@@ -5,7 +5,10 @@ import pytest
 from backend.db.storage import (
     init_db, insert_transactions, get_transactions, get_summary, get_connection,
     get_uncategorized, update_categories, get_categories, create_category,
-    update_transaction, delete_transaction, get_user, _connection,
+    update_category, delete_category, update_transaction, delete_transaction,
+    get_user, get_breakdown, get_recurring, get_setting, set_setting,
+    get_ignored_transfers, create_ignored_transfer, delete_ignored_transfer,
+    get_status, is_ignored_transfer, _connection,
 )
 import backend.db.storage as storage
 
@@ -414,11 +417,20 @@ class TestUpdateTransaction:
     def test_ignores_non_updatable_fields(self):
         insert_transactions([make_purchase()])
         tx_id = get_transactions()[0]["id"]
-        result = update_transaction(tx_id, {"bank": "bbva", "type": "transfer"})
+        result = update_transaction(tx_id, {"id": 9999, "created_at": "2000-01-01T00:00:00"})
         assert result is False
         row = get_transactions()[0]
-        assert row["bank"] == "santander"
-        assert row["type"] == "purchase"
+        assert row["id"] == tx_id
+        assert row["created_at"] != "2000-01-01T00:00:00"
+
+    def test_updates_bank_and_type(self):
+        insert_transactions([make_purchase()])
+        tx_id = get_transactions()[0]["id"]
+        result = update_transaction(tx_id, {"bank": "bbva", "type": "transfer"})
+        assert result is True
+        row = get_transactions()[0]
+        assert row["bank"] == "bbva"
+        assert row["type"] == "transfer"
 
     def test_returns_false_for_nonexistent_id(self):
         result = update_transaction(9999, {"amount": 100.0})
@@ -451,3 +463,267 @@ class TestDeleteTransaction:
         remaining = get_transactions()
         assert len(remaining) == 1
         assert remaining[0]["amount"] == rows[1]["amount"]
+
+# ---------------------------------------------------------------------------
+# Test suite: Schema migrations (init_db run on an already-initialized DB)
+# ---------------------------------------------------------------------------
+class TestMigrations:
+    def test_init_db_is_idempotent(self):
+        init_db()
+        init_db()
+        cols = [r["name"] for r in get_connection().execute("PRAGMA table_info(categories)")]
+        assert cols.count("kind") == 1
+        assert cols.count("budget") == 1
+
+    def test_kind_backfill_infers_income_and_expense(self):
+        # Simulate a pre-existing DB from before `kind` existed: categorize
+        # transactions, then recreate `categories` without the new columns.
+        insert_transactions([make_transfer(), make_purchase(merchant="OXXO")])
+        update_categories([
+            {"id": get_transactions(tx_type="transfer")[0]["id"], "category": "salary"},
+            {"id": get_transactions(tx_type="purchase")[0]["id"], "category": "food"},
+        ])
+        with _connection() as conn:
+            conn.execute("ALTER TABLE categories RENAME TO categories_old")
+            conn.execute("CREATE TABLE categories (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE)")
+            conn.execute("INSERT INTO categories (name) VALUES ('SALARY'), ('FOOD')")
+            conn.execute("DROP TABLE categories_old")
+
+        init_db()  # must detect the missing `kind` column, add it, and backfill
+
+        cats = {c["name"]: c for c in get_categories(detailed=True)}
+        assert cats["SALARY"]["kind"] == "income"
+        assert cats["FOOD"]["kind"] == "expense"
+
+    def test_ignored_transfers_seeded_from_constants(self):
+        rules = get_ignored_transfers()
+        assert any(r["account_last4"] == "6184" and r["bank"] == "Mercado Pago W" for r in rules)
+
+
+# ---------------------------------------------------------------------------
+# Test suite: Category detail, rename, merge & delete
+# ---------------------------------------------------------------------------
+class TestCategoryManagement:
+    def test_detailed_listing_includes_kind_budget_and_count(self):
+        create_category("FOOD", kind="expense")
+        insert_transactions([make_purchase(merchant="OXXO")])
+        update_categories([{"id": get_transactions()[0]["id"], "category": "food"}])
+        cats = {c["name"]: c for c in get_categories(detailed=True)}
+        assert cats["FOOD"]["kind"] == "expense"
+        assert cats["FOOD"]["count"] == 1
+
+    def test_rename_cascades_to_transactions(self):
+        create_category("FOOD")
+        cat_id = next(c["id"] for c in get_categories(detailed=True) if c["name"] == "FOOD")
+        insert_transactions([make_purchase(merchant="OXXO")])
+        update_categories([{"id": get_transactions()[0]["id"], "category": "food"}])
+
+        update_category(cat_id, {"name": "groceries"})
+        assert get_transactions()[0]["category"] == "GROCERIES"
+        assert "GROCERIES" in get_categories()
+        assert "FOOD" not in get_categories()
+
+    def test_rename_onto_existing_category_merges(self):
+        create_category("FOOD")
+        create_category("GROCERIES")
+        food_id = next(c["id"] for c in get_categories(detailed=True) if c["name"] == "FOOD")
+        insert_transactions([make_purchase(merchant="OXXO")])
+        update_categories([{"id": get_transactions()[0]["id"], "category": "food"}])
+
+        update_category(food_id, {"name": "groceries"})
+        assert get_transactions()[0]["category"] == "GROCERIES"
+        assert get_categories() == ["GROCERIES"]
+
+    def test_delete_nulls_transactions_category(self):
+        create_category("FOOD")
+        cat_id = next(c["id"] for c in get_categories(detailed=True) if c["name"] == "FOOD")
+        insert_transactions([make_purchase(merchant="OXXO")])
+        update_categories([{"id": get_transactions()[0]["id"], "category": "food"}])
+
+        assert delete_category(cat_id) is True
+        assert get_transactions()[0]["category"] is None
+        assert "FOOD" not in get_categories()
+
+    def test_delete_returns_false_for_missing_id(self):
+        assert delete_category(9999) is False
+
+    def test_update_returns_none_for_missing_id(self):
+        assert update_category(9999, {"budget": 100}) is None
+
+    def test_update_sets_budget(self):
+        create_category("FOOD")
+        cat_id = next(c["id"] for c in get_categories(detailed=True) if c["name"] == "FOOD")
+        update_category(cat_id, {"budget": 2500.0})
+        cats = {c["name"]: c for c in get_categories(detailed=True)}
+        assert cats["FOOD"]["budget"] == 2500.0
+
+
+# ---------------------------------------------------------------------------
+# Test suite: Category suggestions for uncategorized transactions
+# ---------------------------------------------------------------------------
+class TestCategorySuggestions:
+    def test_suggests_most_frequent_category_for_merchant(self):
+        insert_transactions([
+            make_purchase(merchant="OXXO", amount=50, date="2026-06-01T10:00:00"),
+            make_purchase(merchant="OXXO", amount=60, date="2026-06-05T10:00:00"),
+        ])
+        ids = [tx["id"] for tx in get_transactions()]
+        update_categories([
+            {"id": ids[0], "category": "groceries"},
+            {"id": ids[1], "category": "groceries"},
+        ])
+        insert_transactions([make_purchase(merchant="OXXO", amount=70, date="2026-06-10T10:00:00")])
+        uncategorized = get_uncategorized()
+        assert len(uncategorized) == 1
+        assert uncategorized[0]["suggested_category"] == "GROCERIES"
+
+    def test_no_suggestion_when_no_history(self):
+        insert_transactions([make_purchase(merchant="NEW MERCHANT")])
+        assert get_uncategorized()[0]["suggested_category"] is None
+
+
+# ---------------------------------------------------------------------------
+# Test suite: get_breakdown with year support
+# ---------------------------------------------------------------------------
+class TestBreakdownYear:
+    def test_year_aggregates_across_months(self):
+        insert_transactions([
+            make_purchase(amount=100, date="2026-01-10T10:00:00", merchant="OXXO"),
+            make_purchase(amount=200, date="2026-06-10T10:00:00", merchant="OXXO"),
+        ])
+        data = get_breakdown(year="2026")
+        assert sum(r["total"] for r in data["expenses"]) == 300.0
+
+    def test_month_still_works(self):
+        insert_transactions([make_purchase(amount=100, date="2026-06-10T10:00:00", merchant="OXXO")])
+        data = get_breakdown(month="2026-06")
+        assert sum(r["total"] for r in data["expenses"]) == 100.0
+
+
+# ---------------------------------------------------------------------------
+# Test suite: Recurring expense detection
+# ---------------------------------------------------------------------------
+class TestRecurring:
+    def test_detects_three_consecutive_months_within_tolerance(self):
+        insert_transactions([
+            make_purchase(merchant="NETFLIX", amount=199, date="2026-04-05T10:00:00"),
+            make_purchase(merchant="NETFLIX", amount=199, date="2026-05-05T10:00:00"),
+            make_purchase(merchant="NETFLIX", amount=210, date="2026-06-05T10:00:00"),
+        ])
+        results = get_recurring("2026-06")
+        assert any(r["merchant"] == "NETFLIX" for r in results)
+
+    def test_ignores_merchant_with_a_gap(self):
+        insert_transactions([
+            make_purchase(merchant="ONEOFF", amount=100, date="2026-01-05T10:00:00"),
+            make_purchase(merchant="ONEOFF", amount=100, date="2026-06-05T10:00:00"),
+        ])
+        results = get_recurring("2026-06")
+        assert not any(r["merchant"] == "ONEOFF" for r in results)
+
+    def test_ignores_merchant_with_outlier_amount(self):
+        insert_transactions([
+            make_purchase(merchant="VARIABLE", amount=100, date="2026-04-05T10:00:00"),
+            make_purchase(merchant="VARIABLE", amount=100, date="2026-05-05T10:00:00"),
+            make_purchase(merchant="VARIABLE", amount=1000, date="2026-06-05T10:00:00"),
+        ])
+        results = get_recurring("2026-06")
+        assert not any(r["merchant"] == "VARIABLE" for r in results)
+
+
+# ---------------------------------------------------------------------------
+# Test suite: Settings key/value store
+# ---------------------------------------------------------------------------
+class TestSettings:
+    def test_returns_none_when_unset(self):
+        assert get_setting("savings_goal") is None
+
+    def test_set_and_get(self):
+        set_setting("savings_goal", 5000)
+        assert get_setting("savings_goal") == "5000"
+
+    def test_set_none_clears(self):
+        set_setting("savings_goal", 5000)
+        set_setting("savings_goal", None)
+        assert get_setting("savings_goal") is None
+
+
+# ---------------------------------------------------------------------------
+# Test suite: Ignored transfer rules & filtering on insert
+# ---------------------------------------------------------------------------
+class TestIgnoredTransfers:
+    def test_seeded_rules_are_listed(self):
+        rules = get_ignored_transfers()
+        assert len(rules) == len(storage.IGNORED_ACCOUNT_TRANSFERS)
+
+    def test_create_and_delete_rule(self):
+        rule = create_ignored_transfer("1234", "TEST BANK")
+        assert rule["account_last4"] == "1234"
+        rules = get_ignored_transfers()
+        assert any(r["id"] == rule["id"] for r in rules)
+
+        assert delete_ignored_transfer(rule["id"]) is True
+        rules = get_ignored_transfers()
+        assert not any(r["id"] == rule["id"] for r in rules)
+
+    def test_delete_returns_false_for_missing_id(self):
+        assert delete_ignored_transfer(9999) is False
+
+    def test_insert_skips_incoming_ignored_transfer(self):
+        create_ignored_transfer("6184", "Mercado Pago W")
+        tx = make_transfer()
+        tx["source_account"] = "6184"
+        tx["sender_bank"] = "Mercado Pago W"
+        count = insert_transactions([tx])
+        assert count == 0
+        assert get_transactions() == []
+
+    def test_insert_skips_outgoing_ignored_transfer(self):
+        create_ignored_transfer("9066", "BBVA")
+        tx = {
+            "bank": "santander",
+            "type": "outgoing_transfer",
+            "amount": 500.0,
+            "currency": "MXN",
+            "date": "2026-06-01T10:00:00",
+            "dest_account_last4": "9066",
+            "dest_bank": "BBVA",
+        }
+        count = insert_transactions([tx])
+        assert count == 0
+
+    def test_insert_keeps_non_matching_transfer(self):
+        create_ignored_transfer("6184", "Mercado Pago W")
+        count = insert_transactions([make_transfer()])
+        assert count == 1
+
+    def test_is_ignored_transfer_case_insensitive_bank(self):
+        create_ignored_transfer("6184", "Mercado Pago W")
+        tx = make_transfer()
+        tx["source_account"] = "6184"
+        tx["sender_bank"] = "mercado pago w"
+        assert is_ignored_transfer(tx) is True
+
+
+# ---------------------------------------------------------------------------
+# Test suite: Sync status
+# ---------------------------------------------------------------------------
+class TestStatus:
+    def test_empty_db(self):
+        status = get_status()
+        assert status["last_synced"] is None
+        assert status["uncategorized"] == 0
+
+    def test_reports_uncategorized_count(self):
+        insert_transactions([make_purchase(), make_purchase(amount=200)])
+        assert get_status()["uncategorized"] == 2
+
+    def test_excludes_manual_transactions_from_last_synced(self):
+        tx = make_purchase()
+        tx["reference"] = "MAN-1700000000-123"
+        insert_transactions([tx])
+        assert get_status()["last_synced"] is None
+
+    def test_includes_ingested_transactions_in_last_synced(self):
+        insert_transactions([make_purchase()])
+        assert get_status()["last_synced"] is not None

@@ -114,7 +114,12 @@ SERVER_PORT = 5000
 # ---------------------------------------------------------------------------
 # Transaction processing rules
 # ---------------------------------------------------------------------------
-UPDATABLE_FIELDS = {"amount", "merchant", "category"}
+UPDATABLE_FIELDS = {"amount", "merchant", "category", "sender_bank", "date", "type", "bank", "notes"}
+
+# ---------------------------------------------------------------------------
+# Settings keys writable via GET/PUT /api/settings
+# ---------------------------------------------------------------------------
+SETTINGS_KEYS = {"savings_goal"}
 
 IGNORED_ACCOUNT_TRANSFERS = [
     {"account_last4": "6184", "bank": "Mercado Pago W"},
