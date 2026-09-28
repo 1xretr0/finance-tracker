@@ -63,16 +63,26 @@ HTML_DIR = os.path.join(FRONTEND_DIR, "html")
 # Lazy DB migration: server.py is imported directly by WSGI on the hosted
 # deployment (no __main__ block runs there), so init_db() — which also
 # carries schema migrations — runs once on the first request instead.
+#
+# _db_init_lock guards against concurrent requests within one process/worker
+# both racing into init_db() before the flag is set (double-checked locking).
+# It doesn't help across separate worker processes on a multi-worker host —
+# see storage._add_column_if_missing and the ignored_transfers unique index
+# for the cross-process defense.
 # ---------------------------------------------------------------------------
 _db_initialized = False
+_db_init_lock = threading.Lock()
 
 
 @app.before_request
 def _ensure_db_initialized():
     global _db_initialized
-    if not _db_initialized:
-        init_db()
-        _db_initialized = True
+    if _db_initialized:
+        return
+    with _db_init_lock:
+        if not _db_initialized:
+            init_db()
+            _db_initialized = True
 
 # ---------------------------------------------------------------------------
 # Auth: shared-secret bearer token on all /api/* routes.

@@ -54,11 +54,21 @@ def _end_of_day(date_str: str) -> str:
 def _add_column_if_missing(conn: sqlite3.Connection, table: str, col: str, decl: str) -> bool:
     """Adds `col` to `table` if it doesn't already exist. Returns True if the
     column was just added (so callers can run a one-time backfill), False if
-    it already existed."""
+    it already existed (or a concurrent caller added it first — see below)."""
     cols = [row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()]
     if col in cols:
         return False
-    conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
+    try:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
+    except sqlite3.OperationalError as e:
+        # Lost a race with a concurrent first boot that added this column
+        # between our PRAGMA check and this ALTER (no lock spans the two on
+        # SQLite, and a lock in server.py only covers one process/worker).
+        # The column exists now regardless of who won, so treat it as a
+        # no-op rather than propagating a spurious 500.
+        if "duplicate column name" in str(e).lower():
+            return False
+        raise
     return True
 
 
@@ -163,10 +173,22 @@ def init_db():
         if kind_added:
             _backfill_category_kinds(conn)
 
+        # One-time cleanup for DBs created before the unique index below
+        # existed, where a lost seeding race (or a duplicate manual add)
+        # could have left more than one row per (account_last4, bank).
+        conn.execute("""
+            DELETE FROM ignored_transfers WHERE id NOT IN (
+                SELECT MIN(id) FROM ignored_transfers GROUP BY account_last4, LOWER(bank))
+        """)
+        conn.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_ignored_transfers_unique
+            ON ignored_transfers (account_last4, bank COLLATE NOCASE)
+        """)
+
         if conn.execute("SELECT COUNT(*) as n FROM ignored_transfers").fetchone()["n"] == 0:
             for rule in IGNORED_ACCOUNT_TRANSFERS:
                 conn.execute(
-                    "INSERT INTO ignored_transfers (account_last4, bank) VALUES (?, ?)",
+                    "INSERT OR IGNORE INTO ignored_transfers (account_last4, bank) VALUES (?, ?)",
                     (rule["account_last4"], rule["bank"]),
                 )
 
@@ -702,11 +724,20 @@ def get_ignored_transfers() -> list[dict]:
 
 
 def create_ignored_transfer(account_last4: str, bank: str) -> dict:
+    """Creates a rule, or returns the existing one if it already exists
+    (same account_last4, bank case-insensitive) — the unique index on
+    ignored_transfers makes this idempotent instead of raising."""
     with _connection() as conn:
         cur = conn.execute(
-            "INSERT INTO ignored_transfers (account_last4, bank) VALUES (?, ?)",
+            "INSERT OR IGNORE INTO ignored_transfers (account_last4, bank) VALUES (?, ?)",
             (account_last4, bank),
         )
+        if cur.rowcount == 0:
+            row = conn.execute(
+                "SELECT * FROM ignored_transfers WHERE account_last4 = ? AND bank = ? COLLATE NOCASE",
+                (account_last4, bank),
+            ).fetchone()
+            return dict(row)
         return {"id": cur.lastrowid, "account_last4": account_last4, "bank": bank}
 
 

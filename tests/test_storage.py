@@ -1,6 +1,8 @@
 # ---------------------------------------------------------------------------
 # Tests for SQLite storage layer
 # ---------------------------------------------------------------------------
+import sqlite3
+
 import pytest
 from backend.db.storage import (
     init_db, insert_transactions, get_transactions, get_summary, get_connection,
@@ -499,6 +501,58 @@ class TestMigrations:
         rules = get_ignored_transfers()
         assert any(r["account_last4"] == "6184" and r["bank"] == "Mercado Pago W" for r in rules)
 
+    class _FakeMissingColumnConn:
+        """Wraps a real connection, but reports a column as missing from
+        PRAGMA table_info even though it already exists -- simulating a
+        concurrent caller that lost the race between the PRAGMA check and
+        the ALTER (backend/db/storage.py's _add_column_if_missing)."""
+
+        def __init__(self, real_conn):
+            self._real = real_conn
+
+        def execute(self, sql, *args, **kwargs):
+            if sql.strip().upper().startswith("PRAGMA TABLE_INFO"):
+                return self._real.execute("SELECT NULL AS name WHERE 0")
+            return self._real.execute(sql, *args, **kwargs)
+
+    def test_add_column_tolerates_losing_race(self):
+        conn = get_connection()
+        fake = self._FakeMissingColumnConn(conn)
+        # "kind" already exists on categories; the fake makes the PRAGMA
+        # check miss it, so the ALTER below is the one that must fail
+        # gracefully with "duplicate column name".
+        result = storage._add_column_if_missing(fake, "categories", "kind", "TEXT")
+        assert result is False
+        cols = [r["name"] for r in conn.execute("PRAGMA table_info(categories)")]
+        assert cols.count("kind") == 1
+        conn.close()
+
+    def test_add_column_reraises_other_operational_errors(self):
+        conn = get_connection()
+        with pytest.raises(sqlite3.OperationalError):
+            storage._add_column_if_missing(conn, "no_such_table", "x", "TEXT")
+        conn.close()
+
+    def test_init_db_dedupes_existing_ignored_transfer_duplicates(self):
+        # Simulate a pre-existing DB from before the unique index existed:
+        # drop it, then insert a duplicate the index would otherwise block.
+        with _connection() as conn:
+            conn.execute("DROP INDEX IF EXISTS idx_ignored_transfers_unique")
+            conn.execute(
+                "INSERT INTO ignored_transfers (account_last4, bank) VALUES (?, ?)",
+                ("6184", "mercado pago w"),  # duplicate of a seeded rule, different case
+            )
+        assert len(get_ignored_transfers()) == len(storage.IGNORED_ACCOUNT_TRANSFERS) + 1
+
+        init_db()
+
+        rules = get_ignored_transfers()
+        assert len(rules) == len(storage.IGNORED_ACCOUNT_TRANSFERS)
+        index_row = get_connection().execute(
+            "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_ignored_transfers_unique'"
+        ).fetchone()
+        assert index_row is not None
+
 
 # ---------------------------------------------------------------------------
 # Test suite: Category detail, rename, merge & delete
@@ -704,6 +758,15 @@ class TestIgnoredTransfers:
     def test_seeded_rules_are_listed(self):
         rules = get_ignored_transfers()
         assert len(rules) == len(storage.IGNORED_ACCOUNT_TRANSFERS)
+
+    def test_create_duplicate_rule_is_idempotent(self):
+        baseline = len(get_ignored_transfers())
+        first = create_ignored_transfer("1234", "TEST BANK")
+        assert len(get_ignored_transfers()) == baseline + 1
+
+        second = create_ignored_transfer("1234", "test bank")  # same rule, different case
+        assert second["id"] == first["id"]
+        assert len(get_ignored_transfers()) == baseline + 1
 
     def test_create_and_delete_rule(self):
         rule = create_ignored_transfer("1234", "TEST BANK")

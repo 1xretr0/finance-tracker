@@ -2,6 +2,8 @@
 # Tests for Flask API server endpoints
 # ---------------------------------------------------------------------------
 import importlib
+import threading
+import time
 
 import pytest
 from werkzeug.security import generate_password_hash
@@ -820,3 +822,72 @@ class TestUpdateTransactionExtendedFields:
         tx_id = client.get("/api/transactions").get_json()[0]["id"]
         res = client.put(f"/api/transactions/{tx_id}", json={"date": "not-a-date"})
         assert res.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# Test suite: Lazy DB-init concurrency guard (MED-6)
+# ---------------------------------------------------------------------------
+class TestLazyDbInit:
+    def test_init_runs_once_under_concurrent_first_requests(self, monkeypatch):
+        monkeypatch.setattr(server, "_db_initialized", False)
+        calls = []
+
+        def fake_init_db():
+            time.sleep(0.05)
+            calls.append(1)
+
+        monkeypatch.setattr(server, "init_db", fake_init_db)
+
+        barrier = threading.Barrier(8)
+        results = []
+
+        def worker():
+            barrier.wait(timeout=2)
+            with app.test_client() as c:
+                c.environ_base["HTTP_AUTHORIZATION"] = f"Bearer {TEST_API_TOKEN}"
+                results.append(c.get("/api/categories").status_code)
+
+        threads = [threading.Thread(target=worker) for _ in range(8)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert len(calls) == 1
+        assert all(status == 200 for status in results)
+        assert server._db_initialized is True
+
+    def test_skips_init_once_initialized(self, monkeypatch):
+        monkeypatch.setattr(server, "_db_initialized", True)
+        calls = []
+        monkeypatch.setattr(server, "init_db", lambda: calls.append(1))
+
+        with app.test_client() as c:
+            c.environ_base["HTTP_AUTHORIZATION"] = f"Bearer {TEST_API_TOKEN}"
+            res = c.get("/api/categories")
+
+        assert res.status_code == 200
+        assert calls == []
+
+    def test_failed_init_is_retried_on_next_request(self, monkeypatch):
+        monkeypatch.setattr(server, "_db_initialized", False)
+        monkeypatch.setitem(app.config, "TESTING", True)
+        calls = []
+
+        def flaky_init_db():
+            calls.append(1)
+            if len(calls) == 1:
+                raise RuntimeError("boom")
+
+        monkeypatch.setattr(server, "init_db", flaky_init_db)
+
+        with app.test_client() as c:
+            c.environ_base["HTTP_AUTHORIZATION"] = f"Bearer {TEST_API_TOKEN}"
+            with pytest.raises(RuntimeError):
+                c.get("/api/categories")
+
+            res = c.get("/api/categories")
+            assert res.status_code == 200
+
+        assert len(calls) == 2
+        assert server._db_initialized is True
