@@ -557,6 +557,55 @@ class TestCategoryManagement:
         cats = {c["name"]: c for c in get_categories(detailed=True)}
         assert cats["FOOD"]["budget"] == 2500.0
 
+    def test_merge_applies_kind_and_budget_to_target(self):
+        create_category("FOOD")
+        create_category("GROCERIES")
+        food_id = next(c["id"] for c in get_categories(detailed=True) if c["name"] == "FOOD")
+        groceries_id = next(c["id"] for c in get_categories(detailed=True) if c["name"] == "GROCERIES")
+
+        result = update_category(food_id, {"name": "groceries", "kind": "expense", "budget": 1500.0})
+
+        assert result["id"] == groceries_id
+        assert result["name"] == "GROCERIES"
+        assert result["kind"] == "expense"
+        assert result["budget"] == 1500.0
+        assert get_categories() == ["GROCERIES"]
+        cats = {c["name"]: c for c in get_categories(detailed=True)}
+        assert cats["GROCERIES"]["kind"] == "expense"
+        assert cats["GROCERIES"]["budget"] == 1500.0
+
+    def test_merge_without_kind_or_budget_keeps_target_values(self):
+        create_category("FOOD")
+        create_category("GROCERIES", kind="expense")
+        food_id = next(c["id"] for c in get_categories(detailed=True) if c["name"] == "FOOD")
+        groceries_id = next(c["id"] for c in get_categories(detailed=True) if c["name"] == "GROCERIES")
+        update_category(groceries_id, {"budget": 2000.0})
+
+        result = update_category(food_id, {"name": "groceries"})
+
+        assert result["kind"] == "expense"
+        assert result["budget"] == 2000.0
+
+    def test_rename_with_kind_and_budget_updates_renamed_row(self):
+        create_category("FOOD")
+        cat_id = next(c["id"] for c in get_categories(detailed=True) if c["name"] == "FOOD")
+
+        result = update_category(cat_id, {"name": "groceries", "kind": "expense", "budget": 900.0})
+
+        assert result["id"] == cat_id
+        assert result["name"] == "GROCERIES"
+        assert result["kind"] == "expense"
+        assert result["budget"] == 900.0
+
+    def test_non_string_name_is_ignored(self):
+        create_category("FOOD")
+        cat_id = next(c["id"] for c in get_categories(detailed=True) if c["name"] == "FOOD")
+
+        result = update_category(cat_id, {"name": 5, "budget": 10.0})
+
+        assert result["name"] == "FOOD"
+        assert result["budget"] == 10.0
+
 
 # ---------------------------------------------------------------------------
 # Test suite: Category suggestions for uncategorized transactions

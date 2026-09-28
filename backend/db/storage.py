@@ -395,36 +395,39 @@ def create_category(name: str, kind: str | None = None) -> str:
 def update_category(cat_id: int, fields: dict) -> dict | None:
     """Updates a category's name, kind and/or budget. Renaming onto a name
     that already exists merges the two categories: transactions move to the
-    existing target and the source row is removed. Returns the resulting
-    category row, or None if cat_id doesn't exist."""
+    existing target and the source row is removed. Resolves rename/merge
+    first, then applies kind/budget to whichever row survives, so a merge
+    never silently drops a kind/budget update made in the same call. Returns
+    the resulting category row, or None if cat_id doesn't exist."""
     with _connection() as conn:
         row = conn.execute("SELECT * FROM categories WHERE id = ?", (cat_id,)).fetchone()
         if not row:
             return None
         current_name = row["name"]
+        target_id = cat_id
+
+        raw_name = fields.get("name")
+        new_name = raw_name.strip().upper() if isinstance(raw_name, str) else None
+        if new_name and new_name != current_name:
+            existing = conn.execute(
+                "SELECT id FROM categories WHERE name = ?", (new_name,)
+            ).fetchone()
+            conn.execute(
+                "UPDATE transactions SET category = ? WHERE category = ?",
+                (new_name, current_name),
+            )
+            if existing:
+                conn.execute("DELETE FROM categories WHERE id = ?", (cat_id,))
+                target_id = existing["id"]
+            else:
+                conn.execute("UPDATE categories SET name = ? WHERE id = ?", (new_name, cat_id))
 
         if "kind" in fields:
-            conn.execute("UPDATE categories SET kind = ? WHERE id = ?", (fields["kind"], cat_id))
+            conn.execute("UPDATE categories SET kind = ? WHERE id = ?", (fields["kind"], target_id))
         if "budget" in fields:
-            conn.execute("UPDATE categories SET budget = ? WHERE id = ?", (fields["budget"], cat_id))
+            conn.execute("UPDATE categories SET budget = ? WHERE id = ?", (fields["budget"], target_id))
 
-        if fields.get("name"):
-            new_name = fields["name"].strip().upper()
-            if new_name != current_name:
-                existing = conn.execute(
-                    "SELECT id FROM categories WHERE name = ?", (new_name,)
-                ).fetchone()
-                conn.execute(
-                    "UPDATE transactions SET category = ? WHERE category = ?",
-                    (new_name, current_name),
-                )
-                if existing:
-                    conn.execute("DELETE FROM categories WHERE id = ?", (cat_id,))
-                    cat_id = existing["id"]
-                else:
-                    conn.execute("UPDATE categories SET name = ? WHERE id = ?", (new_name, cat_id))
-
-        return dict(conn.execute("SELECT * FROM categories WHERE id = ?", (cat_id,)).fetchone())
+        return dict(conn.execute("SELECT * FROM categories WHERE id = ?", (target_id,)).fetchone())
 
 
 def delete_category(cat_id: int) -> bool:
