@@ -280,7 +280,9 @@ nav a[aria-current="page"] {
     color: var(--text-primary);
 }
 
-.btn-modal-submit {
+/* .btn-add (settings.css) reuses this — same look, no separate rule (LOW-9). */
+.btn-modal-submit,
+.btn-add {
     padding: 8px 16px;
     background: var(--color-income);
     color: var(--bg-body);
@@ -291,7 +293,8 @@ nav a[aria-current="page"] {
     font-weight: 600;
 }
 
-.btn-modal-submit:hover {
+.btn-modal-submit:hover,
+.btn-add:hover {
     background: #34d399;
 }
 

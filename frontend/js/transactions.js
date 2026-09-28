@@ -57,7 +57,17 @@ function sortRows(rows, field, dir, type) {
 function matchesSharedFilters(tx) {
     if (bankFilter && tx.bank !== bankFilter) return false;
     if (personFilter && tx.person !== personFilter) return false;
-    if (categoryFilter && (tx.category || "").toUpperCase() !== categoryFilter) return false;
+    if (categoryFilter) {
+        const cat = (tx.category || "").toUpperCase();
+        // /api/breakdown coalesces NULL categories to DEFAULT_CATEGORY for
+        // chart display, but raw /api/transactions rows keep category: null
+        // — so the "NO CATEGORY" slice's drill-down must also match those,
+        // not just a category literally named that (HIGH-2).
+        const matches = categoryFilter === DEFAULT_CATEGORY
+            ? cat === "" || cat === DEFAULT_CATEGORY
+            : cat === categoryFilter;
+        if (!matches) return false;
+    }
     return true;
 }
 

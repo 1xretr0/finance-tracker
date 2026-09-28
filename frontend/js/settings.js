@@ -7,7 +7,7 @@ let ignoredTransfers = []; // [{id, account_last4, bank}]
 // ---------------------------------------------------------------------------
 // Categories table
 // ---------------------------------------------------------------------------
-async function loadCategories() {
+async function loadCategoryTable() {
     const tbody = document.getElementById("categories-tbody");
     tbody.innerHTML = `<tr><td colspan="5" class="no-data">Loading…</td></tr>`;
     try {
@@ -92,7 +92,7 @@ async function deleteCategory(row) {
         const res = await apiFetch(`/api/categories/${id}`, { method: "DELETE" });
         if (res.ok) {
             showToast("Category deleted", "success");
-            await loadCategories();
+            await loadCategoryTable();
         } else {
             showToast("Failed to delete category", "error");
         }
@@ -108,7 +108,7 @@ async function mergeCategory(row, targetName) {
         return;
     }
     const ok = await saveCategoryField(row, { name: targetName });
-    if (ok) await loadCategories();
+    if (ok) await loadCategoryTable();
 }
 
 function initCategoriesTable() {
@@ -120,7 +120,7 @@ function initCategoriesTable() {
 
         if (e.target.classList.contains("cat-kind-select")) {
             await saveCategoryField(row, { kind: e.target.value || null });
-            await loadCategories();
+            await loadCategoryTable();
         } else if (e.target.classList.contains("cat-merge-select")) {
             const targetName = e.target.value;
             if (targetName) await mergeCategory(row, targetName);
@@ -146,7 +146,7 @@ function initCategoriesTable() {
                 return;
             }
             await saveCategoryField(row, { name: newName });
-            await loadCategories();
+            await loadCategoryTable();
         } else if (e.target.classList.contains("cat-budget-input")) {
             const id = parseInt(row.dataset.id, 10);
             const current = categories.find((c) => c.id === id);
@@ -154,7 +154,7 @@ function initCategoriesTable() {
             const budget = raw === "" ? null : parseFloat(raw);
             if (budget === current.budget) return;
             await saveCategoryField(row, { budget });
-            await loadCategories();
+            await loadCategoryTable();
         }
     }, true);
 
@@ -189,7 +189,7 @@ async function addCategory() {
             nameInput.value = "";
             kindSelect.value = "";
             showToast("Category added", "success");
-            await loadCategories();
+            await loadCategoryTable();
         } else {
             showToast("Failed to add category", "error");
         }
@@ -355,7 +355,7 @@ function initEventHandlers() {
 // ---------------------------------------------------------------------------
 if (requireAuth()) {
     initEventHandlers();
-    loadCategories();
+    loadCategoryTable();
     loadSavingsGoal();
     loadIgnoredTransfers();
 }

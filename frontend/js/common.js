@@ -5,6 +5,11 @@ const TX_TYPE_PURCHASE = "purchase";
 const TX_TYPE_TRANSFER = "transfer";
 const TX_TYPE_OUTGOING_TRANSFER = "outgoing_transfer";
 
+// Mirrors backend/constants.py's DEFAULT_CATEGORY: the label /api/breakdown
+// gives uncategorized (NULL) rows for chart display. Raw /api/transactions
+// rows keep category: null — see matchesSharedFilters in transactions.js.
+const DEFAULT_CATEGORY = "NO CATEGORY";
+
 const QUARTER_MONTHS = {
     1: [0, 1, 2],
     2: [3, 4, 5],
@@ -437,7 +442,7 @@ async function submitCreateTx() {
 
     if (category.value) payload.category = category.value;
 
-    const submitBtn = document.querySelector(".btn-modal-submit");
+    const submitBtn = document.querySelector("#new-tx-form .btn-modal-submit");
     setButtonLoading(submitBtn, true);
 
     try {
@@ -447,7 +452,13 @@ async function submitCreateTx() {
             body: JSON.stringify(payload),
         });
 
-        if (res.ok) {
+        if (res.status === 200) {
+            // The server returns 200 {"ignored": true} for an internal
+            // transfer matching an ignored-transfer rule — nothing was
+            // stored, so don't claim success or refresh (LOW-MED-8).
+            closeNewTxModal();
+            showToast("Skipped — matches an ignored transfer rule", "info");
+        } else if (res.ok) {
             closeNewTxModal();
             showToast("Transaction created", "success");
             // Pages that display transactions (e.g. /transactions) define this
@@ -517,7 +528,7 @@ async function submitEditTx(id) {
         return;
     }
 
-    const submitBtn = document.querySelector(".btn-modal-submit");
+    const submitBtn = document.querySelector("#new-tx-form .btn-modal-submit");
     setButtonLoading(submitBtn, true);
 
     try {
@@ -615,11 +626,18 @@ function initNewTxUI() {
         btn.addEventListener("click", () => setTypeToggleActive(btn.dataset.type));
     });
 
-    loadCategories().then((cats) => {
-        window.__newTxCategories = cats;
-        buildCategoryDatalist(cats);
-        buildBankDatalist();
-    });
+    // buildBankDatalist only needs the static BANKS_LIST, so build it
+    // unconditionally first — a category-fetch failure shouldn't cascade
+    // into a missing bank list too.
+    buildBankDatalist();
+    loadCategories()
+        .then((cats) => {
+            window.__newTxCategories = Array.isArray(cats) ? cats : [];
+            buildCategoryDatalist(window.__newTxCategories);
+        })
+        .catch(() => {
+            window.__newTxCategories = [];
+        });
 }
 
 // Delegated so it covers both the injected nav button and any pre-existing

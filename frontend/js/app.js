@@ -8,6 +8,23 @@ let expenseChart = null;
 let selectedMonth = getCurrentMonthStr();
 let savingsGoal = null; // number or null, from /api/settings
 
+// Per-refresh dedupe of identical GETs issued concurrently by loadAll()'s
+// loaders (/api/savings x3, /api/breakdown?month x2 — LOW-10). Cleared at
+// the top of every loadAll() so a refresh never reuses a previous refresh's
+// data. Resolved values are shared between callers: treat them as read-only.
+const refreshCache = new Map();
+function fetchShared(url) {
+    let p = refreshCache.get(url);
+    if (!p) {
+        p = fetchJSON(url);
+        refreshCache.set(url, p);
+        p.catch(() => {
+            if (refreshCache.get(url) === p) refreshCache.delete(url);
+        });
+    }
+    return p;
+}
+
 // ---------------------------------------------------------------------------
 // Formatting helpers
 // ---------------------------------------------------------------------------
@@ -122,7 +139,7 @@ async function loadCashflowChart(month) {
     try {
         [monthly, yearSavings] = await Promise.all([
             fetchJSON(`/api/monthly?start_date=${year}-01-01&end_date=${year}-12-31`),
-            fetchJSON(`/api/savings?year=${year}`),
+            fetchShared(`/api/savings?year=${year}`),
         ]);
     } catch (err) {
         showToast("Failed to load cash flow data", "error");
@@ -208,7 +225,7 @@ async function loadCashflowChart(month) {
 async function loadSavingsChart(year) {
     let data;
     try {
-        data = await fetchJSON(`/api/savings?year=${year}`);
+        data = await fetchShared(`/api/savings?year=${year}`);
     } catch (err) {
         showToast("Failed to load savings data", "error");
         return;
@@ -303,7 +320,7 @@ function goToTransactions(month, params) {
 async function loadBreakdownCharts(month) {
     let data;
     try {
-        data = await fetchJSON(`/api/breakdown?month=${month}`);
+        data = await fetchShared(`/api/breakdown?month=${month}`);
     } catch (err) {
         showToast("Failed to load breakdown data", "error");
         return;
@@ -416,7 +433,7 @@ async function loadBudgets(month) {
     try {
         [cats, breakdown] = await Promise.all([
             fetchJSON("/api/categories?detailed=true"),
-            fetchJSON(`/api/breakdown?month=${month}`),
+            fetchShared(`/api/breakdown?month=${month}`),
         ]);
     } catch (err) {
         container.innerHTML = `<div class="section-loading">Failed to load budgets</div>`;
@@ -484,7 +501,7 @@ async function loadMerchants(month) {
         .slice(0, 10)
         .map(
             (m) => `
-                <a class="list-row" href="/transactions?month=${month}&q=${encodeURIComponent(m.merchant)}">
+                <a class="list-row" href="/transactions?month=${month}&eq=${encodeURIComponent(m.merchant)}">
                     <span class="list-row-name">${escapeHTML(m.merchant)}</span>
                     <span class="list-row-value expense">${formatAmount(m.total)}</span>
                 </a>
@@ -518,7 +535,7 @@ async function loadRecurring(month) {
     container.innerHTML = data
         .map(
             (r) => `
-                <a class="list-row" href="/transactions?month=${month}&q=${encodeURIComponent(r.merchant)}">
+                <a class="list-row" href="/transactions?month=${month}&eq=${encodeURIComponent(r.merchant)}">
                     <span class="list-row-name">${escapeHTML(r.merchant)}</span>
                     <span class="list-row-value expense">${formatAmount(r.typical_amount)}</span>
                 </a>
@@ -544,7 +561,7 @@ async function loadSummary(month) {
     let savings, yearBreakdown;
     try {
         [savings, yearBreakdown] = await Promise.all([
-            fetchJSON(`/api/savings?year=${year}`),
+            fetchShared(`/api/savings?year=${year}`),
             fetchJSON(`/api/breakdown?year=${year}`),
         ]);
     } catch (err) {
@@ -597,6 +614,7 @@ async function loadSummary(month) {
 // Global month selector (1.6) & bootstrap
 // ---------------------------------------------------------------------------
 function loadAll(month) {
+    refreshCache.clear();
     document.getElementById("selected-month-label").textContent = monthLabel(month);
     loadKPIs(month);
     loadCashflowChart(month);
