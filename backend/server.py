@@ -372,8 +372,10 @@ def api_ignored_transfers():
 @app.route("/api/categories", methods=["POST"])
 def api_create_category():
     data = request.get_json()
-    if not data or "name" not in data:
+    if not data or not isinstance(data, dict) or "name" not in data:
         return jsonify({"error": "Expected {name}"}), 400
+    if not isinstance(data["name"], str) or not data["name"].strip():
+        return jsonify({"error": "name must be a non-empty string"}), 400
     kind = data.get("kind")
     if kind not in ("income", "expense", None):
         return jsonify({"error": "kind must be 'income', 'expense' or null"}), 400
@@ -389,10 +391,10 @@ def api_update_category(cat_id):
     if "kind" in data and data["kind"] not in ("income", "expense", None):
         return jsonify({"error": "kind must be 'income', 'expense' or null"}), 400
     if "budget" in data and data["budget"] is not None:
-        if not isinstance(data["budget"], (int, float)) or data["budget"] < 0:
+        if isinstance(data["budget"], bool) or not isinstance(data["budget"], (int, float)) or data["budget"] < 0:
             return jsonify({"error": "budget must be a non-negative number or null"}), 400
-    if "name" in data and not data["name"].strip():
-        return jsonify({"error": "name cannot be empty"}), 400
+    if "name" in data and (not isinstance(data["name"], str) or not data["name"].strip()):
+        return jsonify({"error": "name must be a non-empty string"}), 400
 
     updated = update_category(cat_id, data)
     if not updated:

@@ -569,6 +569,19 @@ class TestCategoriesEndpoint:
         res = client.post("/api/categories", json={"name": "food", "kind": "bogus"})
         assert res.status_code == 400
 
+    def test_create_category_rejects_non_string_name(self, client):
+        for bad_name in (5, None, ["x"]):
+            res = client.post("/api/categories", json={"name": bad_name})
+            assert res.status_code == 400
+
+    def test_create_category_rejects_blank_name(self, client):
+        res = client.post("/api/categories", json={"name": "   "})
+        assert res.status_code == 400
+
+    def test_create_category_rejects_non_object_body(self, client):
+        res = client.post("/api/categories", json=["name"])
+        assert res.status_code == 400
+
     def test_detailed_listing_includes_kind_budget_and_count(self, client):
         client.post("/api/categories", json={"name": "food", "kind": "expense"})
         res = client.get("/api/categories?detailed=true")
@@ -610,6 +623,23 @@ class TestCategoryUpdateDeleteEndpoint:
     def test_returns_404_for_missing_id(self, client):
         res = client.put("/api/categories/9999", json={"budget": 100})
         assert res.status_code == 404
+
+    def test_rejects_non_string_name(self, client):
+        cat_id = self._create(client)
+        for bad_name in (5, None, ["x"], {"a": 1}):
+            res = client.put(f"/api/categories/{cat_id}", json={"name": bad_name})
+            assert res.status_code == 400
+        assert client.get("/api/categories").get_json() == ["FOOD"]
+
+    def test_rejects_blank_name(self, client):
+        cat_id = self._create(client)
+        res = client.put(f"/api/categories/{cat_id}", json={"name": "  "})
+        assert res.status_code == 400
+
+    def test_rejects_boolean_budget(self, client):
+        cat_id = self._create(client)
+        res = client.put(f"/api/categories/{cat_id}", json={"budget": True})
+        assert res.status_code == 400
 
     def test_deletes_category(self, client):
         cat_id = self._create(client)
