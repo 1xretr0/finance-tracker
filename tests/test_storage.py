@@ -76,6 +76,18 @@ class TestInsert:
         count = insert_transactions([])
         assert count == 0
 
+    def test_detailed_counts_inserted_ignored_and_duplicates(self):
+        create_ignored_transfer("6184", "Mercado Pago W")
+        ignored_tx = make_transfer()
+        ignored_tx["source_account"] = "6184"
+        ignored_tx["sender_bank"] = "Mercado Pago W"
+        dup_tx = make_purchase()
+
+        insert_transactions([dup_tx])  # pre-insert so the second call is a duplicate
+        result = storage.insert_transactions_detailed([dup_tx, ignored_tx, make_purchase(amount=999)])
+
+        assert result == {"inserted": 1, "ignored": 1, "duplicates": 1}
+
     def test_stores_all_fields(self):
         tx = make_transfer()
         insert_transactions([tx])

@@ -224,14 +224,17 @@ def is_ignored_transfer(tx: dict, conn: sqlite3.Connection | None = None) -> boo
 # ---------------------------------------------------------------------------
 # Transaction insert operations
 # ---------------------------------------------------------------------------
-def insert_transactions(transactions: list[dict]) -> int:
+def insert_transactions_detailed(transactions: list[dict]) -> dict:
     """Inserts transactions, skipping duplicates and internal transfers
-    between the user's own accounts (see is_ignored_transfer). Returns count
-    of new rows inserted."""
+    between the user's own accounts (see is_ignored_transfer). Returns
+    {"inserted", "ignored", "duplicates"} counts, so callers that need to
+    log or report them separately (e.g. process_transactions.py) don't have
+    to lump ignored transfers in with real duplicates."""
     with _connection() as conn:
-        inserted = 0
+        inserted = ignored = duplicates = 0
         for tx in transactions:
             if is_ignored_transfer(tx, conn):
+                ignored += 1
                 continue
             try:
                 conn.execute(
@@ -267,8 +270,16 @@ def insert_transactions(transactions: list[dict]) -> int:
                 )
                 inserted += 1
             except sqlite3.IntegrityError:
-                pass
-        return inserted
+                duplicates += 1
+        return {"inserted": inserted, "ignored": ignored, "duplicates": duplicates}
+
+
+def insert_transactions(transactions: list[dict]) -> int:
+    """Inserts transactions, skipping duplicates and internal transfers
+    between the user's own accounts (see is_ignored_transfer). Returns count
+    of new rows inserted. See insert_transactions_detailed for a breakdown
+    of why the rest were skipped."""
+    return insert_transactions_detailed(transactions)["inserted"]
 
 # ---------------------------------------------------------------------------
 # Transaction query operations

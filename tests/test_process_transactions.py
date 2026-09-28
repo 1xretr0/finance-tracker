@@ -1,13 +1,14 @@
 # ---------------------------------------------------------------------------
 # Tests for the remote-push transaction sink
 # ---------------------------------------------------------------------------
+import logging
 from unittest.mock import patch, MagicMock
 
 import pytest
 import requests
 
 import backend.process_transactions as process_transactions
-from backend.process_transactions import push_transactions
+from backend.process_transactions import push_transactions, push_transactions_detailed
 
 TEST_REMOTE_URL = "https://example.pythonanywhere.com"
 TEST_TOKEN = "test-token"
@@ -93,6 +94,21 @@ class TestPushTransactions:
         assert inserted == 1
         assert mock_post.call_count == 2
 
+    def test_counts_ignored_separately_from_duplicates(self):
+        responses = [make_response(201), make_response(200), make_response(409)]
+        with patch("backend.process_transactions.requests.post", side_effect=responses):
+            result = push_transactions_detailed([
+                {"type": "purchase", "amount": 1.0, "date": "2026-01-01"},
+                {"type": "transfer", "amount": 2.0, "date": "2026-01-02"},
+                {"type": "purchase", "amount": 3.0, "date": "2026-01-03"},
+            ])
+        assert result == {"inserted": 1, "ignored": 1, "duplicates": 1}
+
+    def test_ignored_response_not_counted_as_inserted(self):
+        with patch("backend.process_transactions.requests.post", return_value=make_response(200)):
+            inserted = push_transactions([{"type": "transfer", "amount": 10.0, "date": "2026-01-01"}])
+        assert inserted == 0
+
 
 class TestMainUsesRemoteSinkWhenConfigured:
     def test_main_pushes_when_remote_url_set(self, monkeypatch):
@@ -100,8 +116,10 @@ class TestMainUsesRemoteSinkWhenConfigured:
             {"type": "purchase", "amount": 10.0, "date": "2026-01-01"},
         ])
         monkeypatch.setattr(process_transactions, "save_santander_last_run", lambda: None)
-        with patch("backend.process_transactions.push_transactions", return_value=1) as mock_push, \
-             patch("backend.process_transactions.insert_transactions") as mock_insert:
+        with patch(
+            "backend.process_transactions.push_transactions_detailed",
+            return_value={"inserted": 1, "ignored": 0, "duplicates": 0},
+        ) as mock_push, patch("backend.process_transactions.insert_transactions_detailed") as mock_insert:
             process_transactions.main()
         mock_push.assert_called_once()
         mock_insert.assert_not_called()
@@ -114,8 +132,30 @@ class TestMainUsesRemoteSinkWhenConfigured:
         monkeypatch.setattr(process_transactions, "save_santander_last_run", lambda: None)
         monkeypatch.setattr(process_transactions, "init_db", lambda: None)
         monkeypatch.setattr(process_transactions, "get_summary", lambda: {})
-        with patch("backend.process_transactions.push_transactions") as mock_push, \
-             patch("backend.process_transactions.insert_transactions", return_value=1) as mock_insert:
+        with patch("backend.process_transactions.push_transactions_detailed") as mock_push, \
+             patch(
+                 "backend.process_transactions.insert_transactions_detailed",
+                 return_value={"inserted": 1, "ignored": 0, "duplicates": 0},
+             ) as mock_insert:
             process_transactions.main()
         mock_insert.assert_called_once()
         mock_push.assert_not_called()
+
+    def test_main_logs_ignored_separately_from_duplicates(self, monkeypatch, caplog):
+        monkeypatch.setattr(process_transactions, "REMOTE_API_URL", None)
+        monkeypatch.setattr(process_transactions, "fetch_santander", lambda: [
+            {"type": "purchase", "amount": 1.0, "date": "2026-01-01"},
+            {"type": "purchase", "amount": 2.0, "date": "2026-01-02"},
+            {"type": "transfer", "amount": 3.0, "date": "2026-01-03"},
+        ])
+        monkeypatch.setattr(process_transactions, "save_santander_last_run", lambda: None)
+        monkeypatch.setattr(process_transactions, "init_db", lambda: None)
+        monkeypatch.setattr(process_transactions, "get_summary", lambda: {})
+        monkeypatch.setattr(
+            process_transactions,
+            "insert_transactions_detailed",
+            lambda txs: {"inserted": 1, "ignored": 1, "duplicates": 1},
+        )
+        with caplog.at_level(logging.INFO):
+            process_transactions.main()
+        assert "1 new transaction(s) saved (1 duplicates skipped, 1 internal transfers ignored)" in caplog.text

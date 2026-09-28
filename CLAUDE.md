@@ -45,7 +45,7 @@ The server and DB can be deployed to a public host (e.g. PythonAnywhere) so `/ap
 - Config is environment-variable driven, set via `os.environ.get(...)` in `backend/constants.py`:
   - `API_TOKEN` — shared secret checked on every `/api/*` request. Unset locally by default (no auth in local dev).
   - `DB_PATH` — overrides the default `backend/db/finance_tracker.db` location (e.g. a persistent dir on a host).
-  - `REMOTE_API_URL` — when set on the machine running `process_transactions`, fetched transactions are POSTed to `<REMOTE_API_URL>/api/transactions` with the bearer token instead of written to a local DB. `409` (duplicate) responses are treated as expected and skipped.
+  - `REMOTE_API_URL` — when set on the machine running `process_transactions`, fetched transactions are POSTed to `<REMOTE_API_URL>/api/transactions` with the bearer token instead of written to a local DB. `409` (duplicate) and `200` (`{"ignored": true}`, an internal transfer) responses are both treated as expected and skipped, and counted separately in the ingestion log.
   - `FLASK_DEBUG` — enables Flask's reloader/debugger when set to `true`. Off by default; only for local development, never on a public host.
 - Google OAuth credentials (`credentials.json`, `token.json`) and the ingestion script never need to be deployed to the host — only `backend/server.py`, `backend/db/storage.py`, `backend/constants.py`, and `frontend/` do.
 - Frontend: `frontend/js/common.js` exposes `apiFetch()`, which prompts for the token on first use, persists it in `localStorage`, attaches it to every request, and clears it on a `401`. All page scripts route `/api/*` calls through `apiFetch()` (or `fetchJSON()`, which wraps it) rather than calling `fetch()` directly.
