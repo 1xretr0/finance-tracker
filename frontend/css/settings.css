@@ -1,0 +1,176 @@
+.settings-section {
+    background: var(--bg-card);
+    padding: var(--space-lg);
+    border-radius: var(--radius-lg);
+    margin-bottom: var(--space-lg);
+}
+
+/* --------------------------------------------------------------------------
+   Table
+   -------------------------------------------------------------------------- */
+.settings-table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.settings-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.settings-table th,
+.settings-table td {
+    text-align: left;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border-subtle);
+    font-size: 0.85rem;
+}
+
+.settings-table th {
+    color: var(--text-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-size: 0.75rem;
+}
+
+.settings-table td {
+    color: var(--text-primary);
+}
+
+.settings-table .no-data {
+    text-align: center;
+    color: var(--text-faint);
+    padding: var(--space-lg);
+}
+
+.col-actions {
+    white-space: nowrap;
+    text-align: right;
+}
+
+.cat-name-input,
+.cat-budget-input,
+.cat-kind-select,
+.cat-merge-select {
+    padding: 6px 10px;
+    background: var(--bg-input);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+    outline: none;
+    transition: border-color var(--transition-fast);
+}
+
+.cat-name-input {
+    width: 100%;
+    min-width: 140px;
+    text-transform: uppercase;
+}
+
+.cat-budget-input {
+    width: 110px;
+}
+
+.cat-name-input:focus,
+.cat-budget-input:focus,
+.cat-kind-select:focus,
+.cat-merge-select:focus {
+    border-color: var(--color-income);
+}
+
+.btn-delete-cat {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 1rem;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.btn-delete-cat:hover {
+    color: var(--color-expense);
+    background: rgba(248, 113, 113, 0.1);
+}
+
+/* --------------------------------------------------------------------------
+   Add-row forms (categories & ignored transfers)
+   -------------------------------------------------------------------------- */
+.add-category-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+    margin-top: var(--space-md);
+}
+
+.add-category-row input,
+.add-category-row select {
+    padding: 8px 12px;
+    background: var(--bg-input);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+    outline: none;
+}
+
+.add-category-row input:focus,
+.add-category-row select:focus {
+    border-color: var(--color-income);
+}
+
+/* .btn-add's look lives in styles.css (grouped with .btn-modal-submit, LOW-9). */
+
+/* --------------------------------------------------------------------------
+   Savings goal
+   -------------------------------------------------------------------------- */
+.goal-row label {
+    display: block;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin-bottom: var(--space-sm);
+}
+
+.goal-input-group {
+    display: flex;
+    gap: var(--space-sm);
+    max-width: 320px;
+}
+
+.goal-input-group input {
+    flex: 1;
+    padding: 8px 12px;
+    background: var(--bg-input);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 0.9rem;
+    outline: none;
+}
+
+.goal-input-group input:focus {
+    border-color: var(--color-income);
+}
+
+@media (max-width: 768px) {
+    .settings-table th,
+    .settings-table td {
+        padding: 8px 8px;
+        font-size: 0.8rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .settings-section {
+        padding: var(--space-md);
+    }
+    .add-category-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .goal-input-group {
+        max-width: none;
+    }
+}

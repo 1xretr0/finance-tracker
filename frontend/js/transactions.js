@@ -3,83 +3,38 @@
 // ---------------------------------------------------------------------------
 let currentMonth = null;
 let incomeRows = [];
-let incomeSort = { field: null, dir: "asc" };
 let expenseRows = [];
-let expenseFilter = { field: null, query: "" };
+let visibleIncomeRows = [];
+let visibleExpenseRows = [];
+let incomeState = { sort: "date", dir: "desc", q: "" };
+let expenseState = { sort: "date", dir: "desc", q: "" };
+let bankFilter = "";
+let personFilter = "";
+let categoryFilter = null;
 
 // ---------------------------------------------------------------------------
-// Data loading & rendering
+// Shared helpers
 // ---------------------------------------------------------------------------
-async function loadTransactions(monthStr) {
-    const { start, end } = getMonthDateRange(monthStr);
-
-    let transactions;
-    try {
-        transactions = await fetchJSON(`/api/transactions?start_date=${start}&end_date=${end}`);
-    } catch (err) {
-        showToast("Failed to load transactions", "error");
-        return;
-    }
-
-    const income = transactions.filter((tx) => tx.type === TX_TYPE_TRANSFER);
-    const expenses = transactions.filter((tx) => tx.type === TX_TYPE_PURCHASE || tx.type === TX_TYPE_OUTGOING_TRANSFER);
-
-    incomeRows = income;
-    expenseRows = expenses;
-
-    exitEditMode("income");
-    exitEditMode("expense");
-    renderTable("income-table", sortIncomeRows(incomeRows), "income");
-    renderTable("expense-table", filterExpenseRows(expenseRows), "expense");
+function rowDescription(tx, type) {
+    return type === "income" ? (tx.sender_bank || tx.concept || "") : (tx.merchant || tx.dest_bank || "");
 }
 
-function renderTable(tableId, rows, type) {
-    const tbody = document.querySelector(`#${tableId} tbody`);
-    const section = document.getElementById(`${type}-section`);
-    const inEditMode = section.classList.contains("edit-mode");
-
-    if (rows.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" class="no-data">No transactions</td></tr>`;
-        return;
-    }
-
-    tbody.innerHTML = rows
-        .map((tx) => {
-            const date = tx.date.replace("T", " ").slice(0, 16);
-            const amount = formatAmount(tx.amount);
-            const amountClass = type === "income" ? "amount-income" : "amount-expense";
-            const description = type === "income"
-                ? (tx.sender_bank || tx.concept || "-")
-                : (tx.merchant || tx.dest_bank || "-");
-            const category = tx.category
-                ? `<span class="category-tag">${escapeHTML(tx.category)}</span>`
-                : "";
-
-            return `
-                <tr data-id="${tx.id}" data-amount="${tx.amount}" data-description="${escapeHTML(description)}" data-category="${escapeHTML(tx.category || "")}">
-                    <td class="cell-selector">${inEditMode ? '<span class="row-selector"></span>' : ""}</td>
-                    <td>${escapeHTML(date)}</td>
-                    <td class="${amountClass}">${amount}</td>
-                    <td class="cell-description">${escapeHTML(description)}</td>
-                    <td class="cell-category">${category}</td>
-                    <td class="cell-actions"></td>
-                </tr>
-            `;
-        })
-        .join("");
+// A muted sub-line under the description showing where the money moved
+// (4.4), e.g. "SANTANDER ••1234".
+function bankSubline(tx) {
+    const last4 = tx.card_last4 || tx.account_last4 || tx.dest_account_last4 || "";
+    return last4 ? `${tx.bank} ••${last4}` : (tx.bank || "");
 }
 
-// ---------------------------------------------------------------------------
-// Income sorting
-// ---------------------------------------------------------------------------
-function incomeSortValue(tx, field) {
+function sortValue(tx, field, type) {
     switch (field) {
         case "date":
             return tx.date || "";
         case "amount":
             return parseFloat(tx.amount) || 0;
         case "source":
-            return (tx.sender_bank || tx.concept || "").toLowerCase();
+        case "description":
+            return rowDescription(tx, type).toLowerCase();
         case "category":
             return (tx.category || "").toLowerCase();
         default:
@@ -87,400 +42,305 @@ function incomeSortValue(tx, field) {
     }
 }
 
-function sortIncomeRows(rows) {
-    if (!incomeSort.field) return rows;
-
+function sortRows(rows, field, dir, type) {
     const sorted = [...rows].sort((a, b) => {
-        const av = incomeSortValue(a, incomeSort.field);
-        const bv = incomeSortValue(b, incomeSort.field);
+        const av = sortValue(a, field, type);
+        const bv = sortValue(b, field, type);
         if (av < bv) return -1;
         if (av > bv) return 1;
         return 0;
     });
-
-    if (incomeSort.dir === "desc") sorted.reverse();
+    if (dir === "desc") sorted.reverse();
     return sorted;
 }
 
-// Keep the cached income rows in sync with an inline edit so a later re-sort
-// reflects the change instead of reverting to the loaded data.
-function syncIncomeCache(id, { amount, description, category }) {
-    const tx = incomeRows.find((t) => String(t.id) === String(id));
-    if (!tx) return;
-    tx.amount = amount;
-    tx.sender_bank = description;
-    tx.concept = null;
-    tx.category = category;
-}
-
-function updateSortMenu() {
-    const menu = document.getElementById("income-sort-menu");
-    menu.querySelectorAll(".sort-option").forEach((opt) => {
-        opt.classList.toggle("active", opt.dataset.field === incomeSort.field);
-        opt.dataset.dir = opt.dataset.field === incomeSort.field ? incomeSort.dir : "";
-    });
-}
-
-function closeSortMenu() {
-    const btn = document.getElementById("income-sort-btn");
-    const menu = document.getElementById("income-sort-menu");
-    menu.hidden = true;
-    btn.setAttribute("aria-expanded", "false");
-}
-
-function initSort() {
-    const btn = document.getElementById("income-sort-btn");
-    const menu = document.getElementById("income-sort-menu");
-
-    btn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        closeFilterMenu();
-        const willOpen = menu.hidden;
-        menu.hidden = !willOpen;
-        btn.setAttribute("aria-expanded", String(willOpen));
-        if (willOpen) updateSortMenu();
-    });
-
-    menu.addEventListener("click", (e) => {
-        const opt = e.target.closest(".sort-option");
-        if (!opt) return;
-        const field = opt.dataset.field;
-        if (incomeSort.field === field) {
-            incomeSort.dir = incomeSort.dir === "asc" ? "desc" : "asc";
-        } else {
-            incomeSort.field = field;
-            incomeSort.dir = "asc";
-        }
-        btn.classList.add("active");
-        updateSortMenu();
-        renderTable("income-table", sortIncomeRows(incomeRows), "income");
-    });
-
-    document.addEventListener("click", () => {
-        if (!menu.hidden) closeSortMenu();
-    });
-}
-
-// ---------------------------------------------------------------------------
-// Expense filtering
-// ---------------------------------------------------------------------------
-function expenseFilterValue(tx, field) {
-    switch (field) {
-        case "date":
-            return (tx.date || "").replace("T", " ").slice(0, 16).toLowerCase();
-        case "amount":
-            return String(tx.amount ?? "").toLowerCase();
-        case "description":
-            return (tx.merchant || tx.dest_bank || "").toLowerCase();
-        case "category":
-            return (tx.category || "").toLowerCase();
-        default:
-            return "";
+function matchesSharedFilters(tx) {
+    if (bankFilter && tx.bank !== bankFilter) return false;
+    if (personFilter && tx.person !== personFilter) return false;
+    if (categoryFilter) {
+        const cat = (tx.category || "").toUpperCase();
+        // /api/breakdown coalesces NULL categories to DEFAULT_CATEGORY for
+        // chart display, but raw /api/transactions rows keep category: null
+        // — so the "NO CATEGORY" slice's drill-down must also match those,
+        // not just a category literally named that (HIGH-2).
+        const matches = categoryFilter === DEFAULT_CATEGORY
+            ? cat === "" || cat === DEFAULT_CATEGORY
+            : cat === categoryFilter;
+        if (!matches) return false;
     }
+    return true;
 }
 
-function filterExpenseRows(rows) {
-    const query = expenseFilter.query.trim().toLowerCase();
-    if (!expenseFilter.field || !query) return rows;
-    return rows.filter((tx) => expenseFilterValue(tx, expenseFilter.field).includes(query));
-}
-
-// Keep the cached expense rows in sync with an inline edit so a later re-filter
-// reflects the change instead of reverting to the loaded data.
-function syncExpenseCache(id, { amount, description, category }) {
-    const tx = expenseRows.find((t) => String(t.id) === String(id));
-    if (!tx) return;
-    tx.amount = amount;
-    tx.merchant = description;
-    tx.dest_bank = null;
-    tx.category = category;
-}
-
-function updateFilterMenu() {
-    const menu = document.getElementById("expense-filter-menu");
-    menu.querySelectorAll(".filter-option").forEach((opt) => {
-        opt.classList.toggle("active", opt.dataset.field === expenseFilter.field);
-    });
-}
-
-function closeFilterMenu() {
-    const btn = document.getElementById("expense-filter-btn");
-    const menu = document.getElementById("expense-filter-menu");
-    menu.hidden = true;
-    btn.setAttribute("aria-expanded", "false");
-}
-
-function applyExpenseFilter() {
-    btnFilterActiveState();
-    renderTable("expense-table", filterExpenseRows(expenseRows), "expense");
-}
-
-function btnFilterActiveState() {
-    const btn = document.getElementById("expense-filter-btn");
-    const active = Boolean(expenseFilter.field && expenseFilter.query.trim());
-    btn.classList.toggle("active", active);
-}
-
-function clearExpenseFilter() {
-    const input = document.getElementById("expense-filter-input");
-    expenseFilter = { field: null, query: "" };
-    input.value = "";
-    input.disabled = true;
-    input.placeholder = "Select a column first";
-    updateFilterMenu();
-    applyExpenseFilter();
-}
-
-function initFilter() {
-    const btn = document.getElementById("expense-filter-btn");
-    const menu = document.getElementById("expense-filter-menu");
-    const input = document.getElementById("expense-filter-input");
-    const clearBtn = document.getElementById("expense-filter-clear");
-
-    btn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        closeSortMenu();
-        const willOpen = menu.hidden;
-        menu.hidden = !willOpen;
-        btn.setAttribute("aria-expanded", String(willOpen));
-        if (willOpen) {
-            updateFilterMenu();
-            if (expenseFilter.field) input.focus();
-        }
-    });
-
-    menu.addEventListener("click", (e) => {
-        e.stopPropagation();
-        const opt = e.target.closest(".filter-option");
-        if (!opt) return;
-        expenseFilter.field = opt.dataset.field;
-        input.disabled = false;
-        input.placeholder = `Filter by ${opt.textContent.toLowerCase()}…`;
-        updateFilterMenu();
-        input.focus();
-        applyExpenseFilter();
-    });
-
-    input.addEventListener("input", () => {
-        expenseFilter.query = input.value;
-        applyExpenseFilter();
-    });
-
-    clearBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        clearExpenseFilter();
-    });
-
-    document.addEventListener("click", () => {
-        if (!menu.hidden) closeFilterMenu();
-    });
+// Matches every visible column: date, amount, description (+ its bank/card
+// sub-line) and category (4.1).
+function rowMatchesSearch(tx, type, query) {
+    if (!query) return true;
+    const q = query.trim().toLowerCase();
+    if (!q) return true;
+    const haystack = [
+        (tx.date || "").replace("T", " ").slice(0, 16),
+        String(tx.amount ?? ""),
+        rowDescription(tx, type),
+        bankSubline(tx),
+        tx.category || "",
+    ]
+        .join(" ")
+        .toLowerCase();
+    return haystack.includes(q);
 }
 
 // ---------------------------------------------------------------------------
-// Inline row editing
+// Data loading
 // ---------------------------------------------------------------------------
-function enterEditMode(tableType) {
-    const section = document.getElementById(`${tableType}-section`);
-    section.classList.add("edit-mode");
+async function loadTransactions(month) {
+    currentMonth = month;
+    document.getElementById("transactions-month").value = month;
+    document.querySelector("#income-table tbody").innerHTML = `<tr><td colspan="4" class="no-data">Loading…</td></tr>`;
+    document.querySelector("#expense-table tbody").innerHTML = `<tr><td colspan="4" class="no-data">Loading…</td></tr>`;
 
-    const btn = section.querySelector(".btn-edit-table");
-    btn.textContent = "Done";
-    btn.classList.add("active");
+    const { start, end } = getMonthDateRange(month);
+    let all;
+    try {
+        all = await fetchJSON(`/api/transactions?start_date=${start}&end_date=${end}`);
+    } catch (err) {
+        showToast("Failed to load transactions", "error");
+        return;
+    }
 
-    const rows = section.querySelectorAll("tbody tr[data-id]");
-    rows.forEach((row) => {
-        row.querySelector(".cell-selector").innerHTML = '<span class="row-selector"></span>';
-    });
+    incomeRows = all.filter((tx) => tx.type === TX_TYPE_TRANSFER);
+    expenseRows = all.filter((tx) => tx.type === TX_TYPE_PURCHASE || tx.type === TX_TYPE_OUTGOING_TRANSFER);
+
+    updatePersonFilterOptions();
+    updateMonthNet();
+    applyAllFilters();
+    updateURLState();
 }
 
-function exitEditMode(tableType) {
-    const section = document.getElementById(`${tableType}-section`);
-    if (!section.classList.contains("edit-mode")) return;
+function updatePersonFilterOptions() {
+    const select = document.getElementById("person-filter");
+    const persons = [...new Set([...incomeRows, ...expenseRows].map((tx) => tx.person).filter(Boolean))];
 
-    section.classList.remove("edit-mode");
+    if (persons.length <= 1) {
+        select.hidden = true;
+        select.innerHTML = "";
+        personFilter = "";
+        return;
+    }
 
-    const btn = section.querySelector(".btn-edit-table");
-    btn.textContent = "Edit";
-    btn.classList.remove("active");
-
-    const selected = section.querySelector("tr.row-selected");
-    if (selected) deselectRow(selected);
-
-    const rows = section.querySelectorAll("tbody tr[data-id]");
-    rows.forEach((row) => {
-        row.querySelector(".cell-selector").innerHTML = "";
-        row.querySelector(".cell-actions").innerHTML = "";
-    });
+    select.hidden = false;
+    select.innerHTML =
+        `<option value="">All people</option>` +
+        persons.map((p) => `<option value="${escapeHTML(p)}" ${p === personFilter ? "selected" : ""}>${escapeHTML(p)}</option>`).join("");
+    if (!persons.includes(personFilter)) personFilter = "";
 }
 
-function selectRow(row) {
-    const section = row.closest(".table-section");
-    const prev = section.querySelector("tr.row-selected");
-    if (prev && prev !== row) deselectRow(prev);
+function updateMonthNet() {
+    const income = incomeRows.reduce((s, tx) => s + tx.amount, 0);
+    const expenses = expenseRows.reduce((s, tx) => s + tx.amount, 0);
+    const net = income - expenses;
+    const el = document.getElementById("month-net");
+    el.textContent = `Net: ${formatAmount(net)}`;
+    el.className = `month-net ${net >= 0 ? "income" : "expense"}`;
+}
 
-    row.classList.add("row-selected");
-
-    const amount = row.dataset.amount;
-    const description = row.dataset.description;
-    const category = row.dataset.category;
-    const type = section.id === "income-section" ? "income" : "expense";
+// ---------------------------------------------------------------------------
+// Rendering
+// ---------------------------------------------------------------------------
+function renderRow(tx, type) {
+    const date = (tx.date || "").replace("T", " ").slice(0, 16);
     const amountClass = type === "income" ? "amount-income" : "amount-expense";
+    const description = rowDescription(tx, type) || "-";
+    const sub = bankSubline(tx);
+    const category = tx.category ? `<span class="category-tag">${escapeHTML(tx.category)}</span>` : "";
+    const notesMarker = tx.notes ? `<span class="notes-marker" title="${escapeHTML(tx.notes)}">&#128221;</span>` : "";
 
-    const cells = row.querySelectorAll("td");
-
-    cells[2].innerHTML = `<input type="number" class="inline-edit-input ${amountClass}" step="0.01" value="${escapeHTML(amount)}">`;
-    cells[3].innerHTML = `<input type="text" class="inline-edit-input" value="${escapeHTML(description)}">`;
-    cells[4].innerHTML = `<input type="text" class="inline-edit-input" list="category-list" value="${escapeHTML(category)}">`;
-    cells[5].innerHTML = `
-        <button class="btn-save-row" title="Save">&#10003;</button>
-        <button class="btn-delete-row" title="Delete">&#128465;</button>
+    return `
+        <tr data-id="${tx.id}" tabindex="0">
+            <td>${escapeHTML(date)}</td>
+            <td class="${amountClass}">${formatAmount(tx.amount)}</td>
+            <td class="cell-description">
+                <div class="description-main">${escapeHTML(description)} ${notesMarker}</div>
+                <div class="description-sub">${escapeHTML(sub)}</div>
+            </td>
+            <td class="cell-category">${category}</td>
+        </tr>
     `;
-
-    const firstInput = cells[2].querySelector("input");
-    firstInput.focus();
-    firstInput.select();
 }
 
-function deselectRow(row) {
-    row.classList.remove("row-selected");
-    const amount = row.dataset.amount;
-    const description = row.dataset.description;
-    const category = row.dataset.category;
-    const section = row.closest(".table-section");
-    const type = section.id === "income-section" ? "income" : "expense";
-    const amountClass = type === "income" ? "amount-income" : "amount-expense";
+function renderTable(type, rows) {
+    const tbody = document.querySelector(`#${type}-table tbody`);
+    tbody.innerHTML = rows.length === 0
+        ? `<tr><td colspan="4" class="no-data">No transactions</td></tr>`
+        : rows.map((tx) => renderRow(tx, type)).join("");
 
-    const cells = row.querySelectorAll("td");
-    cells[2].className = amountClass;
-    cells[2].textContent = formatAmount(parseFloat(amount));
-    cells[3].className = "cell-description";
-    cells[3].textContent = description;
-    cells[4].className = "cell-category";
-    cells[4].innerHTML = category
-        ? `<span class="category-tag">${escapeHTML(category)}</span>`
-        : "";
-    cells[5].innerHTML = "";
+    document.getElementById(`${type}-count`).textContent = `${rows.length} row${rows.length === 1 ? "" : "s"}`;
+    document.getElementById(`${type}-sum`).textContent = formatAmount(rows.reduce((s, tx) => s + tx.amount, 0));
 }
 
-async function saveRow(row) {
-    const monthInput = document.getElementById("transactions-month");
-    if (monthInput.value !== currentMonth) {
-        showToast("Month changed — edit cancelled", "error");
-        deselectRow(row);
+function updateSortHeaders() {
+    document.querySelectorAll("#income-table th.sortable").forEach((th) => {
+        th.setAttribute("aria-sort", th.dataset.field === incomeState.sort ? (incomeState.dir === "asc" ? "ascending" : "descending") : "none");
+    });
+    document.querySelectorAll("#expense-table th.sortable").forEach((th) => {
+        th.setAttribute("aria-sort", th.dataset.field === expenseState.sort ? (expenseState.dir === "asc" ? "ascending" : "descending") : "none");
+    });
+}
+
+function renderCategoryChip() {
+    const container = document.getElementById("active-filters");
+    if (!categoryFilter) {
+        container.innerHTML = "";
         return;
     }
-
-    const id = row.dataset.id;
-    const cells = row.querySelectorAll("td");
-    const newAmount = parseFloat(cells[2].querySelector("input").value);
-    const newDescription = cells[3].querySelector("input").value.trim();
-    const newCategory = cells[4].querySelector("input").value.trim();
-
-    if (isNaN(newAmount) || newAmount < 0) return;
-
-    const payload = {};
-    if (newAmount !== parseFloat(row.dataset.amount)) payload.amount = newAmount;
-    if (newDescription !== row.dataset.description) payload.merchant = newDescription;
-    if (newCategory !== row.dataset.category) payload.category = newCategory || null;
-
-    if (Object.keys(payload).length === 0) {
-        deselectRow(row);
-        return;
-    }
-
-    try {
-        const res = await apiFetch(`/api/transactions/${id}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-        });
-
-        if (res.ok) {
-            row.dataset.amount = newAmount;
-            row.dataset.description = newDescription;
-            row.dataset.category = newCategory.toUpperCase();
-            syncIncomeCache(id, {
-                amount: newAmount,
-                description: newDescription,
-                category: newCategory.toUpperCase() || null,
-            });
-            syncExpenseCache(id, {
-                amount: newAmount,
-                description: newDescription,
-                category: newCategory.toUpperCase() || null,
-            });
-            deselectRow(row);
-            showToast("Saved", "success");
-        } else {
-            showToast("Save failed", "error");
-        }
-    } catch (err) {
-        showToast("Save failed", "error");
-    }
+    container.innerHTML = `
+        <span class="filter-chip">
+            ${escapeHTML(categoryFilter)}
+            <button type="button" class="filter-chip-remove" id="remove-category-filter" aria-label="Remove category filter">&times;</button>
+        </span>
+    `;
 }
 
-async function deleteRow(row) {
-    const id = row.dataset.id;
-    try {
-        const res = await apiFetch(`/api/transactions/${id}`, {
-            method: "DELETE",
-        });
-        if (res.ok) {
-            incomeRows = incomeRows.filter((tx) => String(tx.id) !== String(id));
-            expenseRows = expenseRows.filter((tx) => String(tx.id) !== String(id));
-            row.remove();
-            showToast("Deleted", "success");
-        } else {
-            showToast("Delete failed", "error");
-        }
-    } catch (err) {
-        showToast("Delete failed", "error");
-    }
+function applyAllFilters() {
+    visibleIncomeRows = sortRows(
+        incomeRows.filter((tx) => matchesSharedFilters(tx) && rowMatchesSearch(tx, "income", incomeState.q)),
+        incomeState.sort,
+        incomeState.dir,
+        "income"
+    );
+    visibleExpenseRows = sortRows(
+        expenseRows.filter((tx) => matchesSharedFilters(tx) && rowMatchesSearch(tx, "expense", expenseState.q)),
+        expenseState.sort,
+        expenseState.dir,
+        "expense"
+    );
+
+    renderTable("income", visibleIncomeRows);
+    renderTable("expense", visibleExpenseRows);
+    updateSortHeaders();
+    renderCategoryChip();
 }
 
-function initEditMode() {
+// ---------------------------------------------------------------------------
+// URL state (4.8)
+// ---------------------------------------------------------------------------
+function updateURLState() {
+    const url = new URL(window.location);
+    url.searchParams.set("month", currentMonth);
+
+    const setOrDelete = (key, value) => {
+        if (value) url.searchParams.set(key, value);
+        else url.searchParams.delete(key);
+    };
+    setOrDelete("bank", bankFilter);
+    setOrDelete("person", personFilter);
+    setOrDelete("category", categoryFilter);
+    setOrDelete("q", incomeState.q);
+    setOrDelete("eq", expenseState.q);
+
+    history.replaceState({}, "", url);
+}
+
+function initFromURL() {
+    const params = new URLSearchParams(window.location.search);
+    currentMonth = params.get("month") || getCurrentMonthStr();
+    bankFilter = params.get("bank") || "";
+    personFilter = params.get("person") || "";
+    categoryFilter = params.get("category") ? params.get("category").toUpperCase() : null;
+    incomeState.q = params.get("q") || "";
+    expenseState.q = params.get("eq") || "";
+
+    document.getElementById("bank-filter").value = bankFilter;
+    document.getElementById("income-search").value = incomeState.q;
+    document.getElementById("expense-search").value = expenseState.q;
+}
+
+// ---------------------------------------------------------------------------
+// Filter & sort controls
+// ---------------------------------------------------------------------------
+function initBankFilter() {
+    const select = document.getElementById("bank-filter");
+    select.innerHTML = `<option value="">All banks</option>` +
+        BANKS_LIST.map((b) => `<option value="${escapeHTML(b)}">${escapeHTML(b)}</option>`).join("");
+    select.value = bankFilter;
+
+    select.addEventListener("change", () => {
+        bankFilter = select.value;
+        applyAllFilters();
+        updateURLState();
+    });
+}
+
+function initPersonFilter() {
+    document.getElementById("person-filter").addEventListener("change", (e) => {
+        personFilter = e.target.value;
+        applyAllFilters();
+        updateURLState();
+    });
+}
+
+function initSearch() {
+    document.getElementById("income-search").addEventListener("input", (e) => {
+        incomeState.q = e.target.value;
+        applyAllFilters();
+        updateURLState();
+    });
+    document.getElementById("expense-search").addEventListener("input", (e) => {
+        expenseState.q = e.target.value;
+        applyAllFilters();
+        updateURLState();
+    });
+}
+
+function initSortHeaders() {
+    const wire = (tableId, state) => {
+        document.querySelectorAll(`#${tableId} th.sortable`).forEach((th) => {
+            th.addEventListener("click", () => {
+                const field = th.dataset.field;
+                if (state.sort === field) state.dir = state.dir === "asc" ? "desc" : "asc";
+                else {
+                    state.sort = field;
+                    state.dir = "asc";
+                }
+                applyAllFilters();
+            });
+        });
+    };
+    wire("income-table", incomeState);
+    wire("expense-table", expenseState);
+}
+
+function initCategoryChip() {
+    document.getElementById("active-filters").addEventListener("click", (e) => {
+        if (!e.target.closest(".filter-chip-remove")) return;
+        categoryFilter = null;
+        applyAllFilters();
+        updateURLState();
+    });
+}
+
+// ---------------------------------------------------------------------------
+// Row click/keyboard -> edit modal (4.6, 4.7)
+// ---------------------------------------------------------------------------
+function openRowEditor(row) {
+    const id = row.dataset.id;
+    const tx = [...incomeRows, ...expenseRows].find((t) => String(t.id) === String(id));
+    if (tx) openEditTxModal(tx);
+}
+
+function initRowInteractions() {
+    const rowSelector = "#income-table tbody tr[data-id], #expense-table tbody tr[data-id]";
+
     document.addEventListener("click", (e) => {
-        const editBtn = e.target.closest(".btn-edit-table");
-        if (editBtn) {
-            const tableType = editBtn.dataset.table;
-            const section = document.getElementById(`${tableType}-section`);
-            if (section.classList.contains("edit-mode")) {
-                exitEditMode(tableType);
-            } else {
-                enterEditMode(tableType);
-            }
-            return;
-        }
-
-        const selector = e.target.closest(".row-selector");
-        if (selector) {
-            const row = selector.closest("tr");
-            selectRow(row);
-            return;
-        }
-
-        const saveBtn = e.target.closest(".btn-save-row");
-        if (saveBtn) {
-            const row = saveBtn.closest("tr");
-            saveRow(row);
-            return;
-        }
-
-        const deleteBtn = e.target.closest(".btn-delete-row");
-        if (deleteBtn) {
-            const row = deleteBtn.closest("tr");
-            deleteRow(row);
-            return;
-        }
+        const row = e.target.closest(rowSelector);
+        if (row) openRowEditor(row);
     });
 
     document.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-            const row = e.target.closest("tr.row-selected");
-            if (row) {
-                e.preventDefault();
-                saveRow(row);
-            }
+        if (e.key !== "Enter") return;
+        const row = e.target.closest(rowSelector);
+        if (row) {
+            e.preventDefault();
+            openRowEditor(row);
         }
     });
 }
@@ -490,48 +350,64 @@ function initEditMode() {
 // ---------------------------------------------------------------------------
 function initMonthFilter() {
     const input = document.getElementById("transactions-month");
-    const prevBtn = document.getElementById("month-prev");
-    const nextBtn = document.getElementById("month-next");
-
-    currentMonth = getCurrentMonthStr();
-    input.value = currentMonth;
-    loadTransactions(currentMonth);
 
     input.addEventListener("change", () => {
-        if (input.value) {
-            currentMonth = input.value;
-            loadTransactions(input.value);
-        }
+        if (input.value) loadTransactions(input.value);
     });
-
-    prevBtn.addEventListener("click", () => {
-        input.value = shiftMonth(input.value, -1);
-        currentMonth = input.value;
-        loadTransactions(input.value);
-    });
-
-    nextBtn.addEventListener("click", () => {
-        input.value = shiftMonth(input.value, 1);
-        currentMonth = input.value;
-        loadTransactions(input.value);
-    });
+    document.getElementById("month-prev").addEventListener("click", () => loadTransactions(shiftMonth(currentMonth, -1)));
+    document.getElementById("month-next").addEventListener("click", () => loadTransactions(shiftMonth(currentMonth, 1)));
 }
 
-// The new-transaction modal (nav button, Ctrl/Cmd+K, and this page's
-// per-table "+ New" buttons) lives in common.js and is shared across every
-// page. After a successful create, it calls this hook so the visible month
-// refreshes with the new row.
-window.onTransactionCreated = () => {
-    const monthInput = document.getElementById("transactions-month");
-    loadTransactions(monthInput.value);
-};
+// ---------------------------------------------------------------------------
+// CSV export (4.9)
+// ---------------------------------------------------------------------------
+// Quotes every field and prefixes anything starting with = + - @ with a
+// leading apostrophe, guarding against formula injection when opened in a
+// spreadsheet app.
+function csvField(value) {
+    let str = String(value ?? "");
+    if (/^[=+\-@]/.test(str)) str = `'${str}`;
+    return `"${str.replace(/"/g, '""')}"`;
+}
+
+function exportCSV() {
+    const header = ["Type", "Date", "Amount", "Description", "Category", "Bank"];
+    const lines = [header.map(csvField).join(",")];
+
+    visibleIncomeRows.forEach((tx) => {
+        lines.push([tx.type, tx.date, tx.amount, rowDescription(tx, "income"), tx.category || "", tx.bank].map(csvField).join(","));
+    });
+    visibleExpenseRows.forEach((tx) => {
+        lines.push([tx.type, tx.date, tx.amount, rowDescription(tx, "expense"), tx.category || "", tx.bank].map(csvField).join(","));
+    });
+
+    const blob = new Blob([lines.join("\r\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `transactions-${currentMonth}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+}
+
+// The shared modal (common.js) calls this after any create, edit or delete
+// so the currently visible month refreshes with the change.
+window.onTransactionChanged = () => loadTransactions(currentMonth);
 
 // ---------------------------------------------------------------------------
 // Bootstrap
 // ---------------------------------------------------------------------------
 if (requireAuth()) {
+    initFromURL();
+    initBankFilter();
+    initPersonFilter();
+    initSearch();
+    initSortHeaders();
+    initCategoryChip();
+    initRowInteractions();
     initMonthFilter();
-    initEditMode();
-    initSort();
-    initFilter();
+    document.getElementById("export-csv-btn").addEventListener("click", exportCSV);
+    loadTransactions(currentMonth);
 }

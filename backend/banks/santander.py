@@ -30,7 +30,6 @@ from backend.constants import (
 	SANTANDER_LAST_RUN_FILE,
 	DATE_FORMAT_TX,
 	MONTHS_ES,
-	IGNORED_ACCOUNT_TRANSFERS,
 	PATTERN_INCOMING_TRANSFER_UPPER,
 	PATTERN_OUTGOING_TRANSFER_NARRATIVE,
 	PATTERN_OUTGOING_TRANSFER_CONFIRMATION,
@@ -268,9 +267,6 @@ def _parse_incoming_transfer(decoded: str) -> dict | None:
 	if not amount_match or not date_match:
 		return None
 
-	if _is_internal_transfer(source_account_match, sender_bank_match):
-		return None
-
 	amount_str = amount_match.group(1).replace(",", "")
 	time_str = time_match.group(1) + ":00" if time_match else DEFAULT_TIME
 	date_str = f"{date_match.group(1)} {time_str}"
@@ -301,9 +297,6 @@ def _parse_outgoing_transfer(decoded: str) -> dict | None:
 	reference_match = re.search(r"referencia\s+(\d+)", decoded)
 
 	if not amount_match or not date_match:
-		return None
-
-	if _is_internal_transfer(destination_account_digits, destination_bank_name):
 		return None
 
 	amount_str = amount_match.group(1).replace(",", "")
@@ -341,9 +334,6 @@ def _parse_outgoing_transfer_confirmation(decoded: str) -> dict | None:
 	if not amount_match or not date_match or not source_match or not dest_account_match:
 		return None
 
-	if _is_internal_transfer(dest_account_match, dest_bank_match):
-		return None
-
 	amount_str = amount_match.group(1).replace(",", "")
 	time_str = time_match.group(1) + ":00" if time_match else DEFAULT_TIME
 	date_str = f"{date_match.group(1)} {time_str}"
@@ -360,24 +350,6 @@ def _parse_outgoing_transfer_confirmation(decoded: str) -> dict | None:
 		"date": tx_date.isoformat(),
 		"type": TX_TYPE_OUTGOING_TRANSFER,
 	}
-
-# ---------------------------------------------------------------------------
-# Internal transfer filtering
-# ---------------------------------------------------------------------------
-def _is_internal_transfer(destination_account_digits, destination_bank_name) -> bool:
-	if not destination_account_digits or not destination_bank_name:
-		return False
-
-	account = destination_account_digits.group(1)
-	bank = destination_bank_name.group(1).strip().lower()
-
-	is_ignored = any(
-		account == rule["account_last4"] and bank == rule["bank"].lower()
-		for rule in IGNORED_ACCOUNT_TRANSFERS
-	)
-	if is_ignored:
-		logger.info(f"Ignoring internal transfer to account {account} at {bank}")
-	return is_ignored
 
 # ---------------------------------------------------------------------------
 # Gmail message body extraction utilities

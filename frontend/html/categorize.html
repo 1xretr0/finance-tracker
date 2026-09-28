@@ -4,6 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Categorize — Finance Tracker</title>
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#121212">
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="stylesheet" href="/css/styles.css">
     <link rel="stylesheet" href="/css/categorize.css">
 </head>
@@ -14,6 +19,7 @@
             <a href="/">Overview</a>
             <a href="/categorize" class="active" aria-current="page">Categorize</a>
             <a href="/transactions">Transactions</a>
+            <a href="/settings">Settings</a>
             <span class="header-user" id="logged-user"></span>
             <button class="btn-logout" title="Log out">Log out</button>
         </nav>
@@ -32,6 +38,14 @@
                 <div class="category-input-wrapper">
                     <input type="text" id="category-input" list="category-list" placeholder="Type or select a category..." autocomplete="off">
                     <datalist id="category-list"></datalist>
+                    <div class="suggested-hint" id="suggested-hint" hidden></div>
+                </div>
+                <div class="category-chips" id="category-chips"></div>
+                <div class="apply-all-row" id="apply-all-row" hidden>
+                    <label class="apply-all-label">
+                        <input type="checkbox" id="apply-all-checkbox">
+                        <span id="apply-all-text"></span>
+                    </label>
                 </div>
                 <div class="control-buttons">
                     <button id="save-btn" class="btn-save">Save & Next</button>

@@ -67,12 +67,13 @@
 
 .categorize-controls {
     display: flex;
+    flex-wrap: wrap;
     gap: 12px;
     align-items: center;
 }
 
 .category-input-wrapper {
-    flex: 1;
+    flex-basis: 100%;
 }
 
 .category-input-wrapper input {
@@ -91,9 +92,75 @@
     border-color: var(--color-income);
 }
 
+.suggested-hint {
+    margin-top: 6px;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+.category-chips {
+    flex-basis: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+}
+
+.category-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: var(--bg-input);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    cursor: pointer;
+    font-size: 0.8rem;
+    transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+}
+
+.category-chip:hover {
+    background: var(--border);
+    border-color: var(--color-income);
+    color: var(--text-primary);
+}
+
+.chip-key {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    background: var(--bg-elevated);
+    color: var(--text-faint);
+    border-radius: 50%;
+    font-size: 0.65rem;
+}
+
+.apply-all-row {
+    flex-basis: 100%;
+}
+
+.apply-all-label {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+
+.apply-all-label input[type="checkbox"] {
+    accent-color: var(--color-income);
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+}
+
 .control-buttons {
     display: flex;
     gap: var(--space-sm);
+    flex-basis: 100%;
 }
 
 .btn-save {

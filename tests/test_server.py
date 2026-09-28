@@ -2,6 +2,8 @@
 # Tests for Flask API server endpoints
 # ---------------------------------------------------------------------------
 import importlib
+import threading
+import time
 
 import pytest
 from werkzeug.security import generate_password_hash
@@ -564,3 +566,328 @@ class TestCategoriesEndpoint:
         res = client.post("/api/categories", json={"name": "food"})
         assert res.status_code == 201
         assert client.get("/api/categories").get_json().count("FOOD") == 1
+
+    def test_create_category_rejects_invalid_kind(self, client):
+        res = client.post("/api/categories", json={"name": "food", "kind": "bogus"})
+        assert res.status_code == 400
+
+    def test_create_category_rejects_non_string_name(self, client):
+        for bad_name in (5, None, ["x"]):
+            res = client.post("/api/categories", json={"name": bad_name})
+            assert res.status_code == 400
+
+    def test_create_category_rejects_blank_name(self, client):
+        res = client.post("/api/categories", json={"name": "   "})
+        assert res.status_code == 400
+
+    def test_create_category_rejects_non_object_body(self, client):
+        res = client.post("/api/categories", json=["name"])
+        assert res.status_code == 400
+
+    def test_detailed_listing_includes_kind_budget_and_count(self, client):
+        client.post("/api/categories", json={"name": "food", "kind": "expense"})
+        res = client.get("/api/categories?detailed=true")
+        assert res.status_code == 200
+        data = res.get_json()
+        food = next(c for c in data if c["name"] == "FOOD")
+        assert food["kind"] == "expense"
+        assert food["count"] == 0
+
+
+class TestCategoryUpdateDeleteEndpoint:
+    def _create(self, client, name="food", kind=None):
+        client.post("/api/categories", json={"name": name, "kind": kind})
+        cat = next(c for c in client.get("/api/categories?detailed=true").get_json() if c["name"] == name.upper())
+        return cat["id"]
+
+    def test_renames_category(self, client):
+        cat_id = self._create(client)
+        res = client.put(f"/api/categories/{cat_id}", json={"name": "groceries"})
+        assert res.status_code == 200
+        assert res.get_json()["name"] == "GROCERIES"
+
+    def test_updates_budget(self, client):
+        cat_id = self._create(client)
+        res = client.put(f"/api/categories/{cat_id}", json={"budget": 3000})
+        assert res.status_code == 200
+        assert res.get_json()["budget"] == 3000
+
+    def test_rejects_negative_budget(self, client):
+        cat_id = self._create(client)
+        res = client.put(f"/api/categories/{cat_id}", json={"budget": -5})
+        assert res.status_code == 400
+
+    def test_rejects_invalid_kind(self, client):
+        cat_id = self._create(client)
+        res = client.put(f"/api/categories/{cat_id}", json={"kind": "bogus"})
+        assert res.status_code == 400
+
+    def test_returns_404_for_missing_id(self, client):
+        res = client.put("/api/categories/9999", json={"budget": 100})
+        assert res.status_code == 404
+
+    def test_rejects_non_string_name(self, client):
+        cat_id = self._create(client)
+        for bad_name in (5, None, ["x"], {"a": 1}):
+            res = client.put(f"/api/categories/{cat_id}", json={"name": bad_name})
+            assert res.status_code == 400
+        assert client.get("/api/categories").get_json() == ["FOOD"]
+
+    def test_rejects_blank_name(self, client):
+        cat_id = self._create(client)
+        res = client.put(f"/api/categories/{cat_id}", json={"name": "  "})
+        assert res.status_code == 400
+
+    def test_rejects_boolean_budget(self, client):
+        cat_id = self._create(client)
+        res = client.put(f"/api/categories/{cat_id}", json={"budget": True})
+        assert res.status_code == 400
+
+    def test_deletes_category(self, client):
+        cat_id = self._create(client)
+        res = client.delete(f"/api/categories/{cat_id}")
+        assert res.status_code == 200
+        assert "FOOD" not in client.get("/api/categories").get_json()
+
+    def test_delete_returns_404_for_missing_id(self, client):
+        res = client.delete("/api/categories/9999")
+        assert res.status_code == 404
+
+    def test_endpoints_require_auth(self):
+        with app.test_client() as unauth_client:
+            assert unauth_client.put("/api/categories/1", json={"budget": 1}).status_code == 401
+            assert unauth_client.delete("/api/categories/1").status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Test suite: Settings
+# ---------------------------------------------------------------------------
+class TestSettingsEndpoint:
+    def test_returns_null_when_unset(self, client):
+        res = client.get("/api/settings")
+        assert res.status_code == 200
+        assert res.get_json()["savings_goal"] is None
+
+    def test_sets_and_returns_value(self, client):
+        res = client.put("/api/settings", json={"savings_goal": 5000})
+        assert res.status_code == 200
+        assert client.get("/api/settings").get_json()["savings_goal"] == "5000.0"
+
+    def test_clears_value_with_null(self, client):
+        client.put("/api/settings", json={"savings_goal": 5000})
+        client.put("/api/settings", json={"savings_goal": None})
+        assert client.get("/api/settings").get_json()["savings_goal"] is None
+
+    def test_rejects_unknown_key(self, client):
+        res = client.put("/api/settings", json={"bogus_key": 1})
+        assert res.status_code == 400
+
+    def test_rejects_negative_value(self, client):
+        res = client.put("/api/settings", json={"savings_goal": -5})
+        assert res.status_code == 400
+
+    def test_endpoints_require_auth(self):
+        with app.test_client() as unauth_client:
+            assert unauth_client.get("/api/settings").status_code == 401
+            assert unauth_client.put("/api/settings", json={}).status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Test suite: Ignored transfers
+# ---------------------------------------------------------------------------
+class TestIgnoredTransfersEndpoint:
+    def test_lists_seeded_rules(self, client):
+        res = client.get("/api/ignored-transfers")
+        assert res.status_code == 200
+        assert len(res.get_json()) == len(constants.IGNORED_ACCOUNT_TRANSFERS)
+
+    def test_creates_and_deletes_rule(self, client):
+        res = client.post("/api/ignored-transfers", json={"account_last4": "1234", "bank": "TEST"})
+        assert res.status_code == 201
+        rule_id = res.get_json()["id"]
+
+        res = client.delete(f"/api/ignored-transfers/{rule_id}")
+        assert res.status_code == 200
+
+    def test_rejects_missing_fields(self, client):
+        res = client.post("/api/ignored-transfers", json={"account_last4": "1234"})
+        assert res.status_code == 400
+
+    def test_delete_returns_404_for_missing_id(self, client):
+        res = client.delete("/api/ignored-transfers/9999")
+        assert res.status_code == 404
+
+    def test_endpoints_require_auth(self):
+        with app.test_client() as unauth_client:
+            assert unauth_client.get("/api/ignored-transfers").status_code == 401
+            assert unauth_client.post("/api/ignored-transfers", json={}).status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Test suite: Sync status
+# ---------------------------------------------------------------------------
+class TestStatusEndpoint:
+    def test_returns_last_synced_and_uncategorized(self, client):
+        seed_data()
+        res = client.get("/api/status")
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["uncategorized"] == 6
+        assert data["last_synced"] is not None
+
+    def test_requires_auth(self):
+        with app.test_client() as unauth_client:
+            assert unauth_client.get("/api/status").status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Test suite: Recurring expenses
+# ---------------------------------------------------------------------------
+class TestRecurringEndpoint:
+    def test_returns_list(self, client):
+        for i in range(3):
+            insert_transactions([{
+                "bank": "santander", "type": "purchase", "amount": 199.0, "currency": "MXN",
+                "date": f"2026-0{4 + i}-05T10:00:00", "merchant": "NETFLIX",
+            }])
+        res = client.get("/api/recurring?month=2026-06")
+        assert res.status_code == 200
+        merchants = [r["merchant"] for r in res.get_json()]
+        assert "NETFLIX" in merchants
+
+    def test_requires_auth(self):
+        with app.test_client() as unauth_client:
+            assert unauth_client.get("/api/recurring").status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Test suite: Breakdown by year
+# ---------------------------------------------------------------------------
+class TestBreakdownYearEndpoint:
+    def test_year_param_aggregates_across_months(self, client):
+        seed_data()
+        res = client.get("/api/breakdown?year=2026")
+        data = res.get_json()
+        assert sum(r["total"] for r in data["expenses"]) == pytest.approx(430.0 + 5000.0)
+
+
+# ---------------------------------------------------------------------------
+# Test suite: Ignored transfers on POST /api/transactions
+# ---------------------------------------------------------------------------
+class TestCreateTransactionIgnoredTransfer:
+    def test_ignored_transfer_returns_200_not_409(self, client):
+        client.post("/api/ignored-transfers", json={"account_last4": "9066", "bank": "BBVA"})
+        res = client.post("/api/transactions", json={
+            "type": "outgoing_transfer", "amount": 500.0, "date": "2026-06-01T10:00:00",
+            "bank": "SANTANDER", "dest_account_last4": "9066", "dest_bank": "BBVA",
+        })
+        assert res.status_code == 200
+        assert res.get_json()["ignored"] is True
+        assert client.get("/api/transactions").get_json() == []
+
+
+# ---------------------------------------------------------------------------
+# Test suite: Extended PUT /api/transactions/<id> fields
+# ---------------------------------------------------------------------------
+class TestUpdateTransactionExtendedFields:
+    def test_updates_date_type_bank_notes_sender_bank(self, client):
+        seed_data()
+        tx_id = client.get("/api/transactions").get_json()[0]["id"]
+        res = client.put(f"/api/transactions/{tx_id}", json={
+            "date": "2026-05-01T10:00:00", "type": "transfer", "bank": "BBVA",
+            "notes": "reimbursed later", "sender_bank": "HSBC",
+        })
+        assert res.status_code == 200
+        tx = next(t for t in client.get("/api/transactions").get_json() if t["id"] == tx_id)
+        assert tx["date"] == "2026-05-01T10:00:00"
+        assert tx["type"] == "transfer"
+        assert tx["bank"] == "BBVA"
+        assert tx["notes"] == "reimbursed later"
+        assert tx["sender_bank"] == "HSBC"
+
+    def test_rejects_invalid_type(self, client):
+        seed_data()
+        tx_id = client.get("/api/transactions").get_json()[0]["id"]
+        res = client.put(f"/api/transactions/{tx_id}", json={"type": "bogus"})
+        assert res.status_code == 400
+
+    def test_rejects_invalid_bank(self, client):
+        seed_data()
+        tx_id = client.get("/api/transactions").get_json()[0]["id"]
+        res = client.put(f"/api/transactions/{tx_id}", json={"bank": "bogus"})
+        assert res.status_code == 400
+
+    def test_rejects_invalid_date(self, client):
+        seed_data()
+        tx_id = client.get("/api/transactions").get_json()[0]["id"]
+        res = client.put(f"/api/transactions/{tx_id}", json={"date": "not-a-date"})
+        assert res.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# Test suite: Lazy DB-init concurrency guard (MED-6)
+# ---------------------------------------------------------------------------
+class TestLazyDbInit:
+    def test_init_runs_once_under_concurrent_first_requests(self, monkeypatch):
+        monkeypatch.setattr(server, "_db_initialized", False)
+        calls = []
+
+        def fake_init_db():
+            time.sleep(0.05)
+            calls.append(1)
+
+        monkeypatch.setattr(server, "init_db", fake_init_db)
+
+        barrier = threading.Barrier(8)
+        results = []
+
+        def worker():
+            barrier.wait(timeout=2)
+            with app.test_client() as c:
+                c.environ_base["HTTP_AUTHORIZATION"] = f"Bearer {TEST_API_TOKEN}"
+                results.append(c.get("/api/categories").status_code)
+
+        threads = [threading.Thread(target=worker) for _ in range(8)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert len(calls) == 1
+        assert all(status == 200 for status in results)
+        assert server._db_initialized is True
+
+    def test_skips_init_once_initialized(self, monkeypatch):
+        monkeypatch.setattr(server, "_db_initialized", True)
+        calls = []
+        monkeypatch.setattr(server, "init_db", lambda: calls.append(1))
+
+        with app.test_client() as c:
+            c.environ_base["HTTP_AUTHORIZATION"] = f"Bearer {TEST_API_TOKEN}"
+            res = c.get("/api/categories")
+
+        assert res.status_code == 200
+        assert calls == []
+
+    def test_failed_init_is_retried_on_next_request(self, monkeypatch):
+        monkeypatch.setattr(server, "_db_initialized", False)
+        monkeypatch.setitem(app.config, "TESTING", True)
+        calls = []
+
+        def flaky_init_db():
+            calls.append(1)
+            if len(calls) == 1:
+                raise RuntimeError("boom")
+
+        monkeypatch.setattr(server, "init_db", flaky_init_db)
+
+        with app.test_client() as c:
+            c.environ_base["HTTP_AUTHORIZATION"] = f"Bearer {TEST_API_TOKEN}"
+            with pytest.raises(RuntimeError):
+                c.get("/api/categories")
+
+            res = c.get("/api/categories")
+            assert res.status_code == 200
+
+        assert len(calls) == 2
+        assert server._db_initialized is True

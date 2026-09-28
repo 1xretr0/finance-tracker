@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings — Finance Tracker</title>
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#121212">
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="stylesheet" href="/css/styles.css">
+    <link rel="stylesheet" href="/css/settings.css">
+</head>
+<body>
+    <header>
+        <h1>Finance Tracker</h1>
+        <nav>
+            <a href="/">Overview</a>
+            <a href="/categorize">Categorize</a>
+            <a href="/transactions">Transactions</a>
+            <a href="/settings" class="active" aria-current="page">Settings</a>
+            <span class="header-user" id="logged-user"></span>
+            <button class="btn-logout" title="Log out">Log out</button>
+        </nav>
+    </header>
+
+    <main>
+        <section class="settings-section">
+            <div class="section-header">
+                <h2>Categories</h2>
+            </div>
+            <div class="settings-table-wrapper">
+                <table class="settings-table" id="categories-table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Kind</th>
+                            <th>Budget</th>
+                            <th>Used</th>
+                            <th class="col-actions"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="categories-tbody"></tbody>
+                </table>
+            </div>
+            <div class="add-category-row">
+                <input type="text" id="new-category-name" placeholder="New category name">
+                <select id="new-category-kind">
+                    <option value="">Kind (optional)</option>
+                    <option value="income">Income</option>
+                    <option value="expense">Expense</option>
+                </select>
+                <button type="button" class="btn-add" id="add-category-btn">Add category</button>
+            </div>
+        </section>
+
+        <section class="settings-section">
+            <div class="section-header">
+                <h2>Savings Goal</h2>
+            </div>
+            <div class="goal-row">
+                <label for="savings-goal-input">Monthly savings goal (MXN)</label>
+                <div class="goal-input-group">
+                    <input type="number" id="savings-goal-input" min="0" step="0.01" placeholder="No goal set">
+                    <button type="button" class="btn-add" id="save-goal-btn">Save</button>
+                </div>
+            </div>
+        </section>
+
+        <section class="settings-section">
+            <div class="section-header">
+                <h2>Ignored Transfer Rules</h2>
+                <span class="section-header-sub">Internal transfers matching these rules are never imported</span>
+            </div>
+            <div class="settings-table-wrapper">
+                <table class="settings-table" id="ignored-transfers-table">
+                    <thead>
+                        <tr>
+                            <th>Account (last 4)</th>
+                            <th>Bank</th>
+                            <th class="col-actions"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="ignored-transfers-tbody"></tbody>
+                </table>
+            </div>
+            <div class="add-category-row">
+                <input type="text" id="new-rule-account" placeholder="Last 4 digits" maxlength="4">
+                <input type="text" id="new-rule-bank" placeholder="Bank name">
+                <button type="button" class="btn-add" id="add-rule-btn">Add rule</button>
+            </div>
+        </section>
+    </main>
+
+    <script src="/js/common.js"></script>
+    <script src="/js/settings.js"></script>
+</body>
+</html>

@@ -287,11 +287,15 @@ class TestOutgoingTransferParser:
         tx = parse_transaction(OUTGOING_TRANSFER_EMAIL)
         assert tx["bank"] == BANK_SANTANDER
 
-    def test_ignores_transfer_to_mercado_pago_w(self):
+    def test_parses_transfer_to_mercado_pago_w(self):
+        # Internal-transfer filtering moved to storage.is_ignored_transfer;
+        # the parser itself should still parse these emails normally.
         tx = parse_transaction(IGNORED_OUTGOING_TRANSFER_EMAIL)
-        assert tx is None
+        assert tx is not None
+        assert tx["dest_account_last4"] == "6184"
+        assert tx["dest_bank"] == "Mercado Pago W"
 
-    def test_ignores_transfer_to_stp(self):
+    def test_parses_transfer_to_stp(self):
         email = """\
 Notificación Transferencia Interbancaria a través de SuperMóvil.
 
@@ -300,7 +304,9 @@ Apreciable JUAN PEREZ GARCIA
 Le informamos que recibimos su solicitud para realizar una transferencia, de su cuenta terminación 1234, a la cuenta terminación 8275 en STP por un importe de $ 1500.00 el 10/Jun/2026 a las 11:00, con la referencia 9999999.
 """
         tx = parse_transaction(email)
-        assert tx is None
+        assert tx is not None
+        assert tx["dest_account_last4"] == "8275"
+        assert tx["dest_bank"] == "STP"
 
     def test_amount_with_thousands(self):
         email = OUTGOING_TRANSFER_EMAIL.replace("$ 505.00", "$ 12,500.00")
@@ -329,9 +335,13 @@ Concepto de pago:REEMBOLSO
 # Test suite: Incoming transfer ignore list
 # ---------------------------------------------------------------------------
 class TestIncomingTransferIgnoreList:
-    def test_ignores_transfer_from_mercado_pago_w(self):
+    def test_parses_transfer_from_mercado_pago_w(self):
+        # Internal-transfer filtering moved to storage.is_ignored_transfer;
+        # the parser itself should still parse these emails normally.
         tx = parse_transaction(IGNORED_INCOMING_TRANSFER_EMAIL)
-        assert tx is None
+        assert tx is not None
+        assert tx["sender_bank"] == "Mercado Pago W"
+        assert tx["source_account"] == "6184"
 
     def test_does_not_ignore_unknown_sender(self):
         email = IGNORED_INCOMING_TRANSFER_EMAIL.replace(
@@ -403,18 +413,24 @@ class TestOutgoingTransferConfirmationParser:
         tx = parse_transaction(email)
         assert tx["amount"] == 12345.67
 
-    def test_ignores_transfer_to_mercado_pago_w(self):
+    def test_parses_transfer_to_mercado_pago_w(self):
+        # Internal-transfer filtering moved to storage.is_ignored_transfer;
+        # the parser itself should still parse these emails normally.
         email = OUTGOING_TRANSFER_CONFIRMATION_EMAIL.replace(
             "terminación 1306 en BBVA MEXICO",
             "terminación 6184 en Mercado Pago W"
         )
         tx = parse_transaction(email)
-        assert tx is None
+        assert tx is not None
+        assert tx["dest_account_last4"] == "6184"
+        assert tx["dest_bank"] == "Mercado Pago W"
 
-    def test_ignores_transfer_to_stp(self):
+    def test_parses_transfer_to_stp(self):
         email = OUTGOING_TRANSFER_CONFIRMATION_EMAIL.replace(
             "terminación 1306 en BBVA MEXICO",
             "terminación 8275 en STP"
         )
         tx = parse_transaction(email)
-        assert tx is None
+        assert tx is not None
+        assert tx["dest_account_last4"] == "8275"
+        assert tx["dest_bank"] == "STP"

@@ -110,9 +110,11 @@ finance-tracker/
 │       ├── storage.py            # SQLite schema, insert, query, category functions
 │       └── finance_tracker.db    # SQLite database (DO NOT commit)
 ├── frontend/
-│   ├── html/                     # Page templates (index, categorize, transactions)
+│   ├── html/                     # Page templates (index, categorize, transactions, settings)
 │   ├── css/                      # Stylesheets (shared + page-specific)
-│   └── js/                       # Page scripts (app, categorize, transactions, common)
+│   ├── js/                       # Page scripts (app, categorize, transactions, settings, common)
+│   ├── icons/                    # PWA icons (icon.svg source + generated PNGs)
+│   └── manifest.json             # PWA manifest
 ├── tests/                        # pytest suite + .eml fixtures
 ├── requirements.txt              # Python dependencies
 ├── credentials.json              # Google OAuth credentials (DO NOT commit)
@@ -121,34 +123,41 @@ finance-tracker/
 
 ## Dashboard pages
 
-- `/` — Overview: savings line chart, monthly income/expense doughnut breakdown, quarterly savings cards
-- `/categorize` — Assign categories to uncategorized transactions one by one
-- `/transactions` — Side-by-side income/expense tables with quarter filter
+- `/` — Overview: a single global month selector drives everything on the page — a KPI row (income, expenses, net, savings rate, deltas vs. last month/3-month average, month-end spend projection, progress vs. a savings goal), a cash-flow chart (grouped income/expense bars + a net line + an optional goal line) next to the cumulative net-balance chart, income/expense breakdown doughnuts (click a slice to drill into `/transactions` filtered to that month + category), per-category budget progress bars, top merchants and recurring-expense lists, and a quarter/YTD summary. The header shows a data-freshness indicator ("Synced 2h ago").
+- `/categorize` — Work through uncategorized transactions one at a time. Each one is pre-filled with a suggested category (based on how the same merchant/sender was categorized before), plus up to 8 one-click category chips (numbered 1–8 for keyboard shortcuts) filtered to that transaction's income/expense kind. An "apply to all N remaining from X" checkbox batch-categorizes every other queued transaction with the same description in one action. The nav link shows a badge with the current uncategorized count.
+- `/transactions` — Side-by-side income/expense tables, each independently sortable (click a column header) and searchable (matches every visible column), with a totals footer, bank/person filters, a removable category filter chip, and CSV export. Click any row to edit it (or delete it) in the shared modal; the month, filters and search terms are kept in the URL so the view survives a reload or a drill-down link from `/`.
+- `/settings` — Manage categories (rename, tag as income/expense, set a monthly budget, merge into another category, or delete), set a monthly savings goal, and manage the ignored-transfer rules (which internal transfers between your own accounts are skipped on import) without touching code.
+
+The app is installable as a PWA (manifest + icons); on screens under 600px a floating "+" button opens the quick-add modal.
 
 ## API
 
-The Flask server exposes a JSON API used by the dashboard frontend. All endpoints are under `/api/` and require `Authorization: Bearer <API_TOKEN>` (see [Hosting & auth](#hosting--auth)). Page and static routes (`/`, `/categorize`, `/transactions`, CSS/JS) are not gated.
+The Flask server exposes a JSON API used by the dashboard frontend. All endpoints are under `/api/` and require `Authorization: Bearer <API_TOKEN>` (see [Hosting & auth](#hosting--auth)). Page and static routes (`/`, `/categorize`, `/transactions`, `/settings`, CSS/JS) are not gated.
 
-**Transactions** — `GET /api/transactions` returns all transactions with optional filters (`bank`, `type`, `start_date`, `end_date`, `person`). You can also create (`POST`), update (`PUT /<id>`), and delete (`DELETE /<id>`) transactions manually — useful for entries that didn't come from a bank email.
+**Transactions** — `GET /api/transactions` returns all transactions with optional filters (`bank`, `type`, `start_date`, `end_date`, `person`). You can also create (`POST`), update (`PUT /<id>`), and delete (`DELETE /<id>`) transactions manually — useful for entries that didn't come from a bank email. `PUT /<id>` accepts `amount`, `merchant`, `category`, `sender_bank`, `date`, `type`, `bank` and `notes`, and returns `409` on a dedup collision. `POST` returns `200 {"ignored": true}` instead of inserting when the transaction matches an ignored-transfer rule.
 
 **Summaries and charts** — several read-only endpoints power the dashboard visualizations:
 - `/api/summary` — totals grouped by transaction type
 - `/api/monthly` — monthly totals broken down by type
 - `/api/savings` — per-month savings (income minus purchases and outgoing transfers) for a given year
 - `/api/merchants` — top merchants ranked by total spend
-- `/api/breakdown` — income and expenses grouped by category for a given month
+- `/api/breakdown` — income and expenses grouped by category, for a given `month` (`YYYY-MM`) or a whole `year` (`YYYY`)
+- `/api/recurring?month=` — merchants that appear in 3+ consecutive months (of the 6 leading up to `month`) with amounts within ±20% of their median, each with a typical amount, last-seen date and month count
+- `/api/status` — `{last_synced, uncategorized}`: when the DB was last written to by ingestion (excluding manual entries) and how many transactions still need a category
 
-**Categories** — `GET /api/categories` lists all categories. `POST /api/categories` creates one. `GET /api/uncategorized` returns transactions with no category assigned. `PUT /api/transactions/categorize` batch-assigns categories by transaction ID.
+**Categories** — `GET /api/categories` lists category names; `?detailed=true` returns `[{id, name, kind, budget, count}]`. `POST /api/categories` creates one (`{name, kind?}`). `PUT /api/categories/<id>` updates `name`/`kind`/`budget`; renaming onto an existing name merges the two categories (moves the transactions, deletes the source). `DELETE /api/categories/<id>` removes a category and sets its transactions' category back to `NULL`. `GET /api/uncategorized` returns transactions with no category assigned, each with a `suggested_category` inferred from how the same merchant/sender was categorized elsewhere. `PUT /api/transactions/categorize` batch-assigns categories by transaction ID.
+
+**Settings & ignored transfers** — `GET/PUT /api/settings` reads/writes whitelisted keys (currently `savings_goal`; `PUT` accepts a non-negative number or `null`). `GET /api/ignored-transfers` lists the rules used to skip internal transfers on import; `POST` (`{account_last4, bank}`) adds one and `DELETE /<id>` removes one.
 
 All amounts are in MXN. Dates use ISO 8601 format (`YYYY-MM-DDTHH:MM:SS`).
 
 ## Categorization workflow
 
-Transactions are stored without a category by default. The `/categorize` page provides a one-by-one queue to work through them: it fetches the next uncategorized transaction, lets you pick or create a category, and advances to the next. Categories are stored in uppercase (e.g. `FOOD`, `TRANSPORT`).
+Transactions are stored without a category by default. The `/categorize` page provides a one-by-one queue to work through them: it fetches the next uncategorized transaction (pre-filled with a suggested category and quick-pick chips), lets you pick, type or create a category, and advances to the next — optionally applying the same category to every other queued transaction with a matching description in one batch. Categories are stored in uppercase (e.g. `FOOD`, `TRANSPORT`).
 
-Once categorized, transactions appear grouped by category in the `/` overview's monthly breakdown chart. You can also re-categorize any transaction from the `/transactions` page.
+Once categorized, transactions appear grouped by category in the `/` overview's monthly breakdown chart and budget progress bars. You can also re-categorize any transaction from the `/transactions` page, or manage categories in bulk (rename, merge, delete, tag as income/expense, set a budget) on `/settings`.
 
-Categories are free-form — create whatever labels make sense for your spending. They persist in their own `categories` table and are reusable across transactions.
+Categories are free-form — create whatever labels make sense for your spending. They persist in their own `categories` table (`name`, `kind`, `budget`) and are reusable across transactions. `kind` (`income`/`expense`/`NULL`) is inferred automatically for existing categories the first time this column is added, and is set explicitly for anything created afterward, based on the transaction type it was first used with.
 
 ## Tracking by person
 
@@ -160,7 +169,7 @@ The field is not set by the bank parsers automatically; assign it manually via `
 
 Transfers to and from personal accounts at other institutions (e.g. a Mercado Pago wallet or an STP account) are automatically ignored during import and never saved to the database. This prevents internal money movements from inflating income or expense totals.
 
-The ignore list lives in `backend/constants.py` under `IGNORED_ACCOUNT_TRANSFERS`:
+The rules live in the `ignored_transfers` table (`account_last4`, `bank`), not in code — manage them from `/settings` (or via `GET/POST /api/ignored-transfers` and `DELETE /api/ignored-transfers/<id>`) without a redeploy. `backend/constants.py`'s `IGNORED_ACCOUNT_TRANSFERS` is only the seed list used to populate that table the first time it's empty:
 
 ```python
 IGNORED_ACCOUNT_TRANSFERS = [
@@ -169,7 +178,7 @@ IGNORED_ACCOUNT_TRANSFERS = [
 ]
 ```
 
-Add or remove entries here to control which accounts are treated as internal. Matching is done on both `account_last4` and `bank` together, so two different accounts at the same institution won't conflict.
+Matching is done on both `account_last4` and `bank` together (case-insensitive on the bank name), so two different accounts at the same institution won't conflict. The filtering itself happens in `insert_transactions` (storage layer), not in the bank parsers, so it applies the same way whether transactions are written to a local DB or pushed to a hosted API — a matching `POST /api/transactions` returns `200 {"ignored": true}` instead of inserting.
 
 ## Adding a new bank
 
