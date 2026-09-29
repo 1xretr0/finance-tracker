@@ -27,7 +27,7 @@ from backend.constants import (
 	GMAIL_LABEL_SANTANDER,
 	TOKEN_FILE,
 	CREDENTIALS_FILE,
-	SANTANDER_LAST_RUN_FILE,
+	SANTANDER_LAST_RUN_PATH,
 	DATE_FORMAT_TX,
 	MONTHS_ES,
 	PATTERN_INCOMING_TRANSFER_UPPER,
@@ -102,8 +102,8 @@ def fetch_transactions() -> list[dict]:
 # Last run tracking
 # ---------------------------------------------------------------------------
 def _get_last_run_date() -> str | None:
-	if os.path.exists(SANTANDER_LAST_RUN_FILE):
-		with open(SANTANDER_LAST_RUN_FILE) as f:
+	if os.path.exists(SANTANDER_LAST_RUN_PATH):
+		with open(SANTANDER_LAST_RUN_PATH) as f:
 			date = f.read().strip()
 			logger.info(f"Last run date: {date}")
 			return date
@@ -116,7 +116,7 @@ def save_last_run_date():
 	from zoneinfo import ZoneInfo
 
 	epoch = int(datetime.now(ZoneInfo("America/Mexico_City")).timestamp())
-	with open(SANTANDER_LAST_RUN_FILE, "w") as f:
+	with open(SANTANDER_LAST_RUN_PATH, "w") as f:
 		f.write(str(epoch))
 
 	logger.info("Last run date saved!")

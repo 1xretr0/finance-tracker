@@ -50,9 +50,11 @@ GMAIL_LABEL_SANTANDER = "santander_notifications"
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TOKEN_FILE = os.path.join(_PROJECT_ROOT, "token.json")
 CREDENTIALS_FILE = os.path.join(_PROJECT_ROOT, "credentials.json")
-SANTANDER_LAST_RUN_FILE = os.path.join(
-    os.path.dirname(__file__), "banks", "santander_last_run.txt"
-)
+
+SANTANDER_LAST_RUN_FILENAME = "santander_last_run.txt"
+_SANTANDER_DEFAULT_LAST_RUN_FILE = os.path.join(os.path.dirname(__file__), "banks", SANTANDER_LAST_RUN_FILENAME)
+SANTANDER_LAST_RUN_PATH = os.environ.get("SANTANDER_LAST_RUN_PATH", _SANTANDER_DEFAULT_LAST_RUN_FILE)
+
 DB_FILENAME = "finance_tracker.db"
 _DEFAULT_DB_PATH = os.path.join(os.path.dirname(__file__), "db", DB_FILENAME)
 DB_PATH = os.environ.get("DB_PATH", _DEFAULT_DB_PATH)
