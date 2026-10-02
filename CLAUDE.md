@@ -25,7 +25,7 @@ The server and DB can be deployed to a public host (e.g. PythonAnywhere) so `/ap
 - `backend/db/storage.py` — SQLite schema + idempotent migrations, insert, query, summary, category (CRUD, merge, suggestions), recurring-expense detection, settings, ignored-transfer rules, and sync-status functions
 - `backend/constants.py` — Shared constants (tx types, banks, paths, labels, `UPDATABLE_FIELDS`, `SETTINGS_KEYS`, `IGNORED_ACCOUNT_TRANSFERS` seed)
 - `backend/process_transactions.py` — Fetch from Gmail and store (run manually)
-- `backend/banks/santander.py` — Gmail fetcher + parsers for 4 email formats (purchase field-style, purchase narrative, transfer, outgoing_transfer); internal-transfer filtering lives in storage, not here
+- `backend/banks/santander.py` — Gmail fetcher + parsers for 4 email formats (purchase field-style, purchase narrative, transfer, outgoing_transfer); internal-transfer filtering lives in storage, not here. `_authenticate(interactive)` raises `AuthenticationRequiredError` instead of opening a browser when `interactive=False` (used by `POST /api/sync`)
 - `backend/db/finance_tracker.db` — SQLite database (DO NOT commit)
 - `frontend/html/` — Page templates (index, categorize, transactions, settings, login)
 - `frontend/css/` — Stylesheets (shared `styles.css` + page-specific: `categorize.css`, `transactions.css`, `settings.css`, `login.css`)
@@ -46,12 +46,14 @@ The server and DB can be deployed to a public host (e.g. PythonAnywhere) so `/ap
   - `DB_PATH` — overrides the default `backend/db/finance_tracker.db` location (e.g. a persistent dir on a host).
   - `REMOTE_API_URL` — when set on the machine running `process_transactions`, fetched transactions are POSTed to `<REMOTE_API_URL>/api/transactions` with the bearer token instead of written to a local DB. `409` (duplicate) and `200` (`{"ignored": true}`, an internal transfer) responses are both treated as expected and skipped, and counted separately in the ingestion log.
   - `FLASK_DEBUG` — enables Flask's reloader/debugger when set to `true`. Off by default; only for local development, never on a public host.
-- Google OAuth credentials (`credentials.json`, `token.json`) and the ingestion script never need to be deployed to the host — only `backend/server.py`, `backend/db/storage.py`, `backend/constants.py`, and `frontend/` do.
+  - `TOKEN_PATH` — overrides where the Gmail OAuth token (`token.json`) is read/written. Needed on a host so `POST /api/sync` can authenticate without the project's default path.
+- Google OAuth credentials (`credentials.json`) and the ingestion script never need to be deployed to the host — only `token.json` (for `POST /api/sync`), `backend/server.py`, `backend/db/storage.py`, `backend/constants.py`, and `frontend/` do.
+- `POST /api/sync` runs ingestion directly on the host (`run_sync(use_remote=False, interactive=False)`): behind a non-blocking lock (`409` if a sync is already running), and `_authenticate(interactive=False)` never falls back to the interactive OAuth browser flow — a missing/expired/unrefreshable token raises `AuthenticationRequiredError`, mapped to `503` ("re-authenticate locally and upload token.json") instead of hanging.
 - Frontend: `frontend/js/common.js` exposes `apiFetch()`, which prompts for the token on first use, persists it in `localStorage`, attaches it to every request, and clears it on a `401`. All page scripts route `/api/*` calls through `apiFetch()` (or `fetchJSON()`, which wraps it) rather than calling `fetch()` directly.
 
 ## Multi-Bank Design
 
-The system is designed to support multiple transaction sources. Santander MX is the first integration; additional banks will be added later. Each bank module exposes `fetch_transactions(since_epoch: int | None = None) -> list[dict]` and pages through its API's full result set itself (no fixed result cap). Storage and dashboard layers are source-agnostic.
+The system is designed to support multiple transaction sources. Santander MX is the first integration; additional banks will be added later. Each bank module exposes `fetch_transactions(since_epoch: int | None = None, interactive: bool = True) -> list[dict]` and pages through its API's full result set itself (no fixed result cap). `interactive=False` must disable any OAuth flow that needs a browser — the server passes it when running ingestion itself (see `POST /api/sync`). Storage and dashboard layers are source-agnostic.
 
 Ingestion is stateless — there's no per-bank last-run file to sync across machines. `process_transactions.py` derives each source's fetch cursor from the newest transaction already stored for that source's banks (`get_latest_tx_date` in `storage.py`, surfaced to remote clients via `GET /api/status`'s `latest_tx_dates`), pulled back by `SYNC_OVERLAP_HOURS` (`constants.py`) so nothing near the boundary is missed; duplicates from the overlap are deduped by the DB's unique index. `SOURCE_BANKS` (`constants.py`) maps each source name to the `bank` values its parsers write.
 
@@ -66,7 +68,7 @@ Ingestion is stateless — there's no per-bank last-run file to sync across mach
 
 ## Dashboard Pages
 
-- `/` — Overview: one global month selector (URL `?month=`) drives everything — KPI row (income/expenses/net/savings rate, deltas, month-end projection, goal progress), cash-flow chart (grouped bars + net line + goal line) next to the cumulative net-balance chart, breakdown doughnuts (click a slice to drill into `/transactions?month=&category=`), per-category budget progress bars, top merchants + recurring-expense lists, and a quarter/YTD summary. Header shows a sync-freshness indicator.
+- `/` — Overview: one global month selector (URL `?month=`) drives everything — KPI row (income/expenses/net/savings rate, deltas, month-end projection, goal progress), cash-flow chart (grouped bars + net line + goal line) next to the cumulative net-balance chart, breakdown doughnuts (click a slice to drill into `/transactions?month=&category=`), per-category budget progress bars, top merchants + recurring-expense lists, and a quarter/YTD summary. Header shows a sync-freshness indicator and a "Sync now" button that triggers `POST /api/sync`.
 - `/categorize` — Work through uncategorized transactions one at a time, pre-filled with a suggested category and up to 8 kind-filtered one-click chips (keys 1–8), plus a batch "apply to all N remaining from X" action. Nav link shows an uncategorized-count badge.
 - `/transactions` — Side-by-side income/expense tables, independently sortable and searchable, with totals footer, bank/person filters, a removable category chip, CSV export, and click-a-row-to-edit via the shared modal. View state (`month`, `category`, `bank`, `q`, `eq`) lives in the URL.
 - `/settings` — Category management (rename/merge/delete, `kind`, `budget`), savings goal, and ignored-transfer rules — all previously only editable via code/DB.
@@ -81,6 +83,7 @@ Ingestion is stateless — there's no per-bank last-run file to sync across mach
 - `GET /api/breakdown` — income/expense grouped by category for a `month` (`YYYY-MM`) or a whole `year` (`YYYY`)
 - `GET /api/recurring` — recurring merchants for a `month` (3+ consecutive months, amounts within ±20% of median)
 - `GET /api/status` — `{last_synced, uncategorized, latest_tx_dates}` sync-freshness + uncategorized count + per-source ingestion cursor (used by `process_transactions.py` in remote mode)
+- `POST /api/sync` — runs ingestion on the host and stores results in its own DB; returns `{inserted, ignored, duplicates}`. `409` if a sync is already running; `503` if Gmail re-authentication is needed (see Hosting & Auth)
 - `GET /api/uncategorized` — transactions with no category assigned, each with a `suggested_category`
 - `PUT /api/transactions/categorize` — batch assign categories `[{id, category}]`
 - `POST /api/transactions` — manually create a transaction `{type, amount, date, ...}` (returns `409` on duplicate, `200 {"ignored": true}` if it matches an ignored-transfer rule)
