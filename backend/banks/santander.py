@@ -34,7 +34,7 @@ from backend.constants import (
 	PATTERN_OUTGOING_TRANSFER_CONFIRMATION,
 	PATTERN_PURCHASE_NARRATIVE,
 	PATTERN_UNIQUE_POINTS_PURCHASE_AMOUNT,
-	PATTERN_UNIQUE_POINTS_PURCHASE_CURRENCY,
+	PATTERN_UNIQUE_POINTS_PURCHASE_CURRENCIES,
 	PATTERN_ACCOUNT_TERMINATION,
 	DEFAULT_TIME,
 )
@@ -162,7 +162,9 @@ def parse_transaction(plain_text: str) -> dict | None:
 	if PATTERN_PURCHASE_NARRATIVE in lowered_plain_text:
 		return _parse_purchase_narrative(plain_text)
 
-	if PATTERN_UNIQUE_POINTS_PURCHASE_AMOUNT in lowered_plain_text and PATTERN_UNIQUE_POINTS_PURCHASE_CURRENCY in lowered_plain_text:
+	if PATTERN_UNIQUE_POINTS_PURCHASE_AMOUNT in lowered_plain_text and any(
+		c in lowered_plain_text for c in PATTERN_UNIQUE_POINTS_PURCHASE_CURRENCIES
+	):
 		return _parse_unique_points_purchase(plain_text)
 
 	return _parse_purchase(plain_text)
@@ -229,7 +231,7 @@ def _parse_unique_points_purchase(decoded: str) -> dict | None:
 	merchant_match = re.search(
 		rf"una compra\s+en\s+(.+?)\s+{PATTERN_UNIQUE_POINTS_PURCHASE_AMOUNT}", decoded, re.IGNORECASE | re.DOTALL
 	)
-	card_match = re.search(rf"{PATTERN_ACCOUNT_TERMINATION}\s*\*{{0,2}}(\d{{4}})", decoded)
+	card_match = re.search(rf"{PATTERN_ACCOUNT_TERMINATION}\s*\*{{0,2}}(\d{{4}})", decoded, re.IGNORECASE)
 	amount_match = re.search(rf"{PATTERN_UNIQUE_POINTS_PURCHASE_AMOUNT}\s+de\s*\$([0-9,]+\.\d{{2}})", decoded)
 	date_match = re.search(r"(\d{2}/\d{2}/\d{4})", decoded)
 
@@ -358,16 +360,32 @@ def _parse_outgoing_transfer_confirmation(decoded: str) -> dict | None:
 # Gmail message body extraction utilities
 # ---------------------------------------------------------------------------
 def _extract_plain_body(payload: dict) -> str | None:
-	"""Extracts the text/plain body from a Gmail message payload."""
+	"""Extracts the text/plain body from a Gmail message payload. Tries UTF-8
+	first (the common case); if the raw bytes aren't valid UTF-8 (e.g. a
+	forwarded email whose original part declared iso-8859-1), falls back to
+	the part's own Content-Type charset, defaulting to latin-1 so decoding
+	never raises."""
 	parts = [payload]
 	while parts:
 		part = parts.pop(0)
 		if part.get("mimeType") == "text/plain":
 			data = part.get("body", {}).get("data", "")
 			if data:
-				return base64.urlsafe_b64decode(data).decode("utf-8", errors="ignore")
+				raw = base64.urlsafe_b64decode(data)
+				try:
+					return raw.decode("utf-8")
+				except UnicodeDecodeError:
+					return raw.decode(_part_charset(part), errors="replace")
 		parts.extend(part.get("parts", []))
 	return None
+
+
+def _part_charset(part: dict) -> str:
+	"""Reads the charset declared in a message part's Content-Type header,
+	defaulting to latin-1 (which never raises on decode) when absent."""
+	content_type = _get_header(part, "Content-Type")
+	charset_match = re.search(r'charset="?([\w-]+)"?', content_type, re.IGNORECASE)
+	return charset_match.group(1) if charset_match else "latin-1"
 
 
 def _get_header(payload: dict, name: str) -> str:

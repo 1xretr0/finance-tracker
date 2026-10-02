@@ -110,3 +110,25 @@ class TestExtractPlainBody:
             ],
         }
         assert _extract_plain_body(payload) == "first"
+
+    def test_falls_back_to_declared_charset_when_not_valid_utf8(self):
+        """A forwarded email whose original part declared iso-8859-1 (e.g. the
+        new Santander Unique Points template) isn't valid UTF-8 once it
+        contains accented characters — must decode via its own charset."""
+        text = "TERMINACIÓN autorizó"
+        payload = {
+            "mimeType": "text/plain",
+            "headers": [{"name": "Content-Type", "value": 'text/plain; charset="iso-8859-1"'}],
+            "body": {"data": base64.urlsafe_b64encode(text.encode("iso-8859-1")).decode()},
+        }
+        assert _extract_plain_body(payload) == text
+
+    def test_falls_back_to_latin1_when_charset_missing_and_not_utf8(self):
+        """No Content-Type header and invalid UTF-8 bytes must still decode
+        (via the latin-1 default) instead of raising."""
+        raw = "café".encode("iso-8859-1")
+        payload = {
+            "mimeType": "text/plain",
+            "body": {"data": base64.urlsafe_b64encode(raw).decode()},
+        }
+        assert _extract_plain_body(payload) == raw.decode("latin-1")

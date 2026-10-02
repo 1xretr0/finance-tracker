@@ -172,6 +172,57 @@ class TestUniquePointsPurchaseParser:
         assert tx["amount"] == 12345.67
 
 # ---------------------------------------------------------------------------
+# Test data: Unique Points purchase emails (newer "MXN" template, uppercase
+# TERMINACIÓN, no "M.N." suffix)
+# ---------------------------------------------------------------------------
+UNIQUE_POINTS_PURCHASE_MXN_EMAIL = """\
+01/10/2026
+
+REALIZASTE UNA COMPRA CON TU TARJETA DE crédito TERMINACIÓN 1397
+
+Estimado cliente, te informamos que se autorizó una compra en RESTAURAT CAMOMILA por un monto de $291.50 MXN.
+
+Por esta transacción se sumarán a la cuenta del titular: 17 Unique Point que podrá utilizar en Santander Unique Rewards.
+"""
+
+# ---------------------------------------------------------------------------
+# Test suite: Unique Points purchase parser (newer "MXN" template)
+# ---------------------------------------------------------------------------
+class TestUniquePointsPurchaseMxnParser:
+    def test_parses_amount(self):
+        tx = parse_transaction(UNIQUE_POINTS_PURCHASE_MXN_EMAIL)
+        assert tx["amount"] == 291.50
+
+    def test_parses_merchant(self):
+        tx = parse_transaction(UNIQUE_POINTS_PURCHASE_MXN_EMAIL)
+        assert tx["merchant"] == "RESTAURAT CAMOMILA"
+
+    def test_parses_card_last4(self):
+        tx = parse_transaction(UNIQUE_POINTS_PURCHASE_MXN_EMAIL)
+        assert tx["card_last4"] == "1397"
+
+    def test_parses_date(self):
+        tx = parse_transaction(UNIQUE_POINTS_PURCHASE_MXN_EMAIL)
+        assert tx["date"] == "2026-10-01T00:00:00"
+
+    def test_type_is_purchase(self):
+        tx = parse_transaction(UNIQUE_POINTS_PURCHASE_MXN_EMAIL)
+        assert tx["type"] == "purchase"
+
+    def test_currency_is_mxn(self):
+        tx = parse_transaction(UNIQUE_POINTS_PURCHASE_MXN_EMAIL)
+        assert tx["currency"] == "MXN"
+
+    def test_bank_is_santander(self):
+        tx = parse_transaction(UNIQUE_POINTS_PURCHASE_MXN_EMAIL)
+        assert tx["bank"] == BANK_SANTANDER_GOLD
+
+    def test_amount_with_thousands(self):
+        email = UNIQUE_POINTS_PURCHASE_MXN_EMAIL.replace("$291.50", "$12,345.67")
+        tx = parse_transaction(email)
+        assert tx["amount"] == 12345.67
+
+# ---------------------------------------------------------------------------
 # Test data: Transfer emails (incoming)
 # ---------------------------------------------------------------------------
 TRANSFER_EMAIL = """\

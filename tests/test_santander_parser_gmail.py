@@ -38,6 +38,18 @@ UNIQUE_POINTS_PAYLOAD = {
     }
 }
 
+# Unique Points purchase email, newer "MXN" template — the original
+# text/plain part declared iso-8859-1 and the raw bytes are NOT valid UTF-8
+# once decoded (contains Latin-1 accented chars), exercising the charset
+# fallback in _extract_plain_body.
+UNIQUE_POINTS_MXN_PAYLOAD = {
+    "mimeType": "text/plain",
+    "headers": [{"name": "Content-Type", "value": 'text/plain; charset="iso-8859-1"'}],
+    "body": {
+        "data": "Cl9fX19fX19fX19fX19fX19fX19fX19fX19fX19fX19fCkZyb206IFNhbnRhbmRlciA8bm90aWZpY2FjaW9uQG9wZXJhY2lvbmVzLnNhbnRhbmRlci5jb20ubXg-ClNlbnQ6IFRodXJzZGF5LCBPY3RvYmVyIDEsIDIwMjYgMjo1Nzo1OCBQTSAoVVRDLTA2OjAwKSBHdWFkYWxhamFyYSwgTWV4aWNvIENpdHksIE1vbnRlcnJleQpUbzogc2ViYXNtb3JhbmRlekBob3RtYWlsLmNvbSA8c2ViYXNtb3JhbmRlekBob3RtYWlsLmNvbT4KU3ViamVjdDogVHUgY29tcHJhIHRlIGFjYWJhIGRlIGdlbmVyYXIgVW5pcXVlIFBvaW50cwoKCgpbU2FudGFuZGVyXQowMS8xMC8yMDI2CltTYW50YW5kZXJdCgpSRUFMSVpBU1RFIFVOQSBDT01QUkEgQ09OIFRVIFRBUkpFVEEgREUgY3LpZGl0byBURVJNSU5BQ0nTTiAxMzk3CgpFc3RpbWFkbyBjbGllbnRlLCB0ZSBpbmZvcm1hbW9zIHF1ZSBzZSBhdXRvcml68yB1bmEgY29tcHJhIGVuIFJFU1RBVVJBVCBDQU1PTUlMQSBwb3IgdW4gbW9udG8gZGUgJDI5MS41MCBNWE4uCgpQb3IgZXN0YSB0cmFuc2FjY2nzbiBzZSBzdW1hcuFuIGEgbGEgY3VlbnRhIGRlbCB0aXR1bGFyOiAxNyBVbmlxdWUgUG9pbnQgcXVlIHBvZHLhIHV0aWxpemFyIGVuIFNhbnRhbmRlciBVbmlxdWUgUmV3YXJkcy4K"
+    }
+}
+
 # ---------------------------------------------------------------------------
 # Test suite: Transfer confirmation parser with real Gmail data
 # ---------------------------------------------------------------------------
@@ -177,5 +189,50 @@ class TestUniquePointsPurchaseWithGmailData:
 
     def test_currency_is_mxn(self):
         plain_text = _extract_plain_body(UNIQUE_POINTS_PAYLOAD)
+        tx = parse_transaction(plain_text)
+        assert tx["currency"] == "MXN"
+
+# ---------------------------------------------------------------------------
+# Test suite: Unique Points purchase (newer "MXN" template) with real Gmail
+# data — covers the iso-8859-1 charset fallback and uppercase TERMINACIÓN
+# ---------------------------------------------------------------------------
+class TestUniquePointsPurchaseMxnWithGmailData:
+    def test_extracts_and_parses_correctly(self):
+        """Test the full pipeline: extract from Gmail payload → parse transaction."""
+        plain_text = _extract_plain_body(UNIQUE_POINTS_MXN_PAYLOAD)
+        assert plain_text is not None
+        assert "crédito" in plain_text  # Validate iso-8859-1 decoding worked
+
+        tx = parse_transaction(plain_text)
+        assert tx is not None
+        assert tx["type"] == "purchase"
+
+    def test_parses_amount(self):
+        plain_text = _extract_plain_body(UNIQUE_POINTS_MXN_PAYLOAD)
+        tx = parse_transaction(plain_text)
+        assert tx["amount"] == 291.50
+
+    def test_parses_merchant(self):
+        plain_text = _extract_plain_body(UNIQUE_POINTS_MXN_PAYLOAD)
+        tx = parse_transaction(plain_text)
+        assert tx["merchant"] == "RESTAURAT CAMOMILA"
+
+    def test_parses_card_last4(self):
+        plain_text = _extract_plain_body(UNIQUE_POINTS_MXN_PAYLOAD)
+        tx = parse_transaction(plain_text)
+        assert tx["card_last4"] == "1397"
+
+    def test_parses_date(self):
+        plain_text = _extract_plain_body(UNIQUE_POINTS_MXN_PAYLOAD)
+        tx = parse_transaction(plain_text)
+        assert tx["date"] == "2026-10-01T00:00:00"
+
+    def test_bank_is_santander(self):
+        plain_text = _extract_plain_body(UNIQUE_POINTS_MXN_PAYLOAD)
+        tx = parse_transaction(plain_text)
+        assert tx["bank"] == BANK_SANTANDER_GOLD
+
+    def test_currency_is_mxn(self):
+        plain_text = _extract_plain_body(UNIQUE_POINTS_MXN_PAYLOAD)
         tx = parse_transaction(plain_text)
         assert tx["currency"] == "MXN"

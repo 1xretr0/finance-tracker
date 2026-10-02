@@ -151,7 +151,7 @@ PATTERN_OUTGOING_TRANSFER_NARRATIVE = "le informamos que recibimos su solicitud 
 PATTERN_OUTGOING_TRANSFER_CONFIRMATION = "confirmación de transferencia"
 PATTERN_PURCHASE_NARRATIVE = "una compra en el comercio"
 PATTERN_UNIQUE_POINTS_PURCHASE_AMOUNT = "por un monto"
-PATTERN_UNIQUE_POINTS_PURCHASE_CURRENCY = "m.n."
+PATTERN_UNIQUE_POINTS_PURCHASE_CURRENCIES = ("m.n.", "mxn")
 
 # Common regex components
 PATTERN_ACCOUNT_TERMINATION = r"terminaci[oó]n"
