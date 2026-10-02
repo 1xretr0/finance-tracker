@@ -8,9 +8,6 @@ token.json
 *.db-wal
 *.storage
 
-# last run date txt
-*_last_run.txt
-
 # Python
 .venv/
 __pycache__/
