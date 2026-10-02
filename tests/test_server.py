@@ -809,7 +809,15 @@ class TestSyncEndpoint:
         ):
             res = client.post("/api/sync")
         assert res.status_code == 503
-        assert "token.json" in res.get_json()["error"]
+
+    def test_returns_500_when_run_sync_signals_failure(self, client):
+        """run_sync returns None (not a dict) when the cursor lookup, fetch,
+        or save step failed non-auth — distinct from a legitimate empty
+        result, which is a dict of zero counts."""
+        with patch("backend.process_transactions.run_sync", return_value=None):
+            res = client.post("/api/sync")
+        assert res.status_code == 500
+        assert "error" in res.get_json()
 
 
 # ---------------------------------------------------------------------------

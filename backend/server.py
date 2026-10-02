@@ -280,6 +280,8 @@ def api_sync():
             result = run_sync(use_remote=False, interactive=False)
         except AuthenticationRequiredError:
             return jsonify({"error": "Re-authenticate locally and upload token.json"}), 503
+        if result is None:
+            return jsonify({"error": "Sync failed, check server logs"}), 500
         return jsonify(result)
     finally:
         _sync_lock.release()

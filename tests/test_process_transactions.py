@@ -333,7 +333,7 @@ class TestRunSync:
         monkeypatch.setattr(process_transactions, "fetch_santander", fetch_mock)
         process_transactions.run_sync(use_remote=True)
         expected = process_transactions._compute_since("2026-06-20T10:00:00")
-        fetch_mock.assert_called_once_with(expected)
+        fetch_mock.assert_called_once_with(expected, interactive=True)
 
     def test_logs_traceback_on_cursor_failure(self, monkeypatch, caplog):
         def raise_connection_error(source):
@@ -364,5 +364,5 @@ class TestMainExitsOnFailure:
         monkeypatch.setattr(process_transactions, "init_db", lambda: None)
         monkeypatch.setattr(process_transactions, "get_summary", lambda: {})
         monkeypatch.setattr(process_transactions, "get_latest_date", lambda source: None)
-        monkeypatch.setattr(process_transactions, "fetch_santander", lambda since_epoch: [])
+        monkeypatch.setattr(process_transactions, "fetch_santander", lambda since_epoch, interactive=True: [])
         process_transactions.main()

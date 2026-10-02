@@ -189,4 +189,3 @@ class TestInteractiveFlag:
         with patcher:
             fetch_transactions(since_epoch=None, interactive=False)
         assert calls == [False]
->>>>>>> f13c0bd (test: add reproducer for dashboard-triggered sync (interactive auth flag, /api/sync, TOKEN_PATH))
