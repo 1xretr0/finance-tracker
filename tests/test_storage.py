@@ -888,7 +888,10 @@ class TestGetLatestTxDate:
         assert get_latest_tx_date(["santander"]) == "2026-06-10T08:00:00"
 
     def test_includes_latest_tx_dates_in_status(self):
-        insert_transactions([make_purchase(date="2026-06-15T15:01:07")])
+        from backend.constants import BANK_SANTANDER
+        tx = make_purchase(date="2026-06-15T15:01:07")
+        tx["bank"] = BANK_SANTANDER
+        insert_transactions([tx])
         status = get_status()
         assert status["latest_tx_dates"]["santander"] == "2026-06-15T15:01:07"
 
