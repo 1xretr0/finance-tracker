@@ -4,6 +4,7 @@
 import importlib
 import threading
 import time
+from unittest.mock import patch
 
 import pytest
 from werkzeug.security import generate_password_hash
@@ -137,6 +138,20 @@ class TestApiAuth:
         reloaded = importlib.reload(constants)
         assert reloaded.FLASK_DEBUG is True
         monkeypatch.delenv("FLASK_DEBUG", raising=False)
+        importlib.reload(constants)
+
+    def test_token_file_defaults_to_project_root(self, monkeypatch):
+        monkeypatch.delenv("TOKEN_PATH", raising=False)
+        reloaded = importlib.reload(constants)
+        assert reloaded.TOKEN_FILE.endswith("token.json")
+        assert "TOKEN_PATH" not in reloaded.TOKEN_FILE
+        importlib.reload(constants)
+
+    def test_token_file_overridable_via_env(self, monkeypatch):
+        monkeypatch.setenv("TOKEN_PATH", "/tmp/custom-token.json")
+        reloaded = importlib.reload(constants)
+        assert reloaded.TOKEN_FILE == "/tmp/custom-token.json"
+        monkeypatch.delenv("TOKEN_PATH", raising=False)
         importlib.reload(constants)
 
 # ---------------------------------------------------------------------------
@@ -738,6 +753,63 @@ class TestStatusEndpoint:
     def test_requires_auth(self):
         with app.test_client() as unauth_client:
             assert unauth_client.get("/api/status").status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Test suite: Dashboard-triggered sync (Phase 2, "Sync now")
+# ---------------------------------------------------------------------------
+class TestSyncEndpoint:
+    def test_runs_sync_and_returns_counts(self, client):
+        with patch(
+            "backend.process_transactions.run_sync",
+            return_value={"inserted": 2, "ignored": 1, "duplicates": 0},
+        ) as mock_run_sync:
+            res = client.post("/api/sync")
+        assert res.status_code == 200
+        assert res.get_json() == {"inserted": 2, "ignored": 1, "duplicates": 0}
+        mock_run_sync.assert_called_once_with(use_remote=False, interactive=False)
+
+    def test_requires_auth(self):
+        with app.test_client() as unauth_client:
+            assert unauth_client.post("/api/sync").status_code == 401
+
+    def test_returns_409_when_a_sync_is_already_running(self, client):
+        assert server._sync_lock.acquire(blocking=False)
+        try:
+            res = client.post("/api/sync")
+            assert res.status_code == 409
+        finally:
+            server._sync_lock.release()
+
+    def test_releases_lock_after_a_completed_sync(self, client):
+        with patch(
+            "backend.process_transactions.run_sync",
+            return_value={"inserted": 0, "ignored": 0, "duplicates": 0},
+        ):
+            client.post("/api/sync")
+        assert server._sync_lock.acquire(blocking=False)
+        server._sync_lock.release()
+
+    def test_releases_lock_even_when_run_sync_raises(self, client):
+        with patch(
+            "backend.process_transactions.run_sync",
+            side_effect=RuntimeError("boom"),
+        ):
+            with pytest.raises(RuntimeError):
+                client.post("/api/sync")
+        assert server._sync_lock.acquire(blocking=False)
+        server._sync_lock.release()
+
+    def test_returns_503_when_gmail_authentication_is_unavailable(self, client):
+        from backend.banks.santander import AuthenticationRequiredError
+
+        with patch(
+            "backend.process_transactions.run_sync",
+            side_effect=AuthenticationRequiredError("no valid token"),
+        ):
+            res = client.post("/api/sync")
+        assert res.status_code == 503
+        assert "token.json" in res.get_json()["error"]
 
 
 # ---------------------------------------------------------------------------

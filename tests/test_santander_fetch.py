@@ -70,13 +70,13 @@ class FakeService:
         return self._messages_resource
 
 
-def _patch_gmail(pages, bodies):
+def _patch_gmail(pages, bodies, authenticate=None):
     fake_messages = FakeMessagesResource(pages, bodies)
     fake_service = FakeService(fake_messages)
     return fake_messages, patch.multiple(
         santander,
         build=lambda *a, **kw: fake_service,
-        _authenticate=lambda: None,
+        _authenticate=authenticate or (lambda interactive=True: None),
     )
 
 
@@ -162,3 +162,31 @@ class TestPagination:
             transactions = fetch_transactions(since_epoch=None)
         assert len(transactions) == 1
         assert len(fake_messages.list_calls) == 2
+
+
+class TestInteractiveFlag:
+    """The server (Phase 2) calls fetch_transactions(interactive=False) so a
+    sync request never blocks on an interactive OAuth browser flow."""
+
+    def test_defaults_to_interactive_authentication(self):
+        calls = []
+        fake_messages, patcher = _patch_gmail(
+            pages=[{"messages": []}],
+            bodies={},
+            authenticate=lambda interactive=True: calls.append(interactive),
+        )
+        with patcher:
+            fetch_transactions(since_epoch=None)
+        assert calls == [True]
+
+    def test_forwards_interactive_false_to_authenticate(self):
+        calls = []
+        fake_messages, patcher = _patch_gmail(
+            pages=[{"messages": []}],
+            bodies={},
+            authenticate=lambda interactive=True: calls.append(interactive),
+        )
+        with patcher:
+            fetch_transactions(since_epoch=None, interactive=False)
+        assert calls == [False]
+>>>>>>> f13c0bd (test: add reproducer for dashboard-triggered sync (interactive auth flag, /api/sync, TOKEN_PATH))
