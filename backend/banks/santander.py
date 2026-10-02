@@ -41,18 +41,27 @@ from backend.constants import (
 
 logger = logging.getLogger(__name__)
 
+
+class AuthenticationRequiredError(RuntimeError):
+	"""Raised by _authenticate(interactive=False) when there's no valid,
+	refreshable Gmail token — e.g. a server-triggered sync with no browser
+	available to complete the interactive OAuth flow."""
+
+
 # ---------------------------------------------------------------------------
 # Gmail fetch & orchestration
 # ---------------------------------------------------------------------------
-def fetch_transactions(since_epoch: int | None = None) -> list[dict]:
+def fetch_transactions(since_epoch: int | None = None, interactive: bool = True) -> list[dict]:
 	"""Fetches Santander purchase notifications from Gmail and returns parsed
 	transactions. Stateless: the caller (process_transactions.py) derives
 	`since_epoch` from the DB's newest stored transaction for this source
 	instead of a per-client last-run file; `None` fetches the whole label.
 	Pages through the full result set via `nextPageToken` — GMAIL_MAX_RESULTS
-	is only the page size, not a hard cap."""
+	is only the page size, not a hard cap. `interactive=False` (used by the
+	server's /api/sync) disables the browser-based OAuth flow — see
+	_authenticate."""
 	service = build(
-		GMAIL_SERVICE_NAME, GMAIL_SERVICE_VERSION, credentials=_authenticate()
+		GMAIL_SERVICE_NAME, GMAIL_SERVICE_VERSION, credentials=_authenticate(interactive)
 	)
 
 	query = f"label:{GMAIL_LABEL_SANTANDER}"
@@ -110,18 +119,26 @@ def fetch_transactions(since_epoch: int | None = None) -> list[dict]:
 # ---------------------------------------------------------------------------
 # Gmail OAuth authentication
 # ---------------------------------------------------------------------------
-def _authenticate():
+def _authenticate(interactive: bool = True):
+	"""`interactive=False` (the server's /api/sync) never opens a browser —
+	it only refreshes an existing token, raising AuthenticationRequiredError
+	if that's not possible, instead of hanging on run_local_server()."""
 	creds = None
 	if os.path.exists(TOKEN_FILE):
 		creds = Credentials.from_authorized_user_file(TOKEN_FILE, GMAIL_SCOPES)
 	if not creds or not creds.valid:
 		if creds and creds.expired and creds.refresh_token:
 			creds.refresh(Request())
-		else:
+		elif interactive:
 			flow = InstalledAppFlow.from_client_secrets_file(
 				CREDENTIALS_FILE, GMAIL_SCOPES
 			)
 			creds = flow.run_local_server(port=0)
+		else:
+			raise AuthenticationRequiredError(
+				"No valid Gmail token and interactive auth is disabled; "
+				"re-authenticate locally and upload token.json"
+			)
 		with open(TOKEN_FILE, "w") as f:
 			f.write(creds.to_json())
 	return creds

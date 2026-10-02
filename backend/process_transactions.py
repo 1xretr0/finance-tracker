@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 
 import requests
 
-from backend.banks.santander import fetch_transactions as fetch_santander
+from backend.banks.santander import fetch_transactions as fetch_santander, AuthenticationRequiredError
 from backend.db.storage import init_db, insert_transactions_detailed, get_summary, get_latest_tx_date
 from backend.constants import API_TOKEN, REMOTE_API_URL, SOURCE_BANKS, SYNC_OVERLAP_HOURS
 
@@ -85,12 +85,15 @@ def get_latest_date(source: str) -> str | None:
 # ---------------------------------------------------------------------------
 # Main workflow
 # ---------------------------------------------------------------------------
-def run_sync(use_remote: bool) -> dict | None:
+def run_sync(use_remote: bool, interactive: bool = True) -> dict | None:
     """Fetches and stores new Santander transactions since the DB-derived
     cursor. Returns {"inserted", "ignored", "duplicates"} (zero counts if
     nothing new was found) on success, or None if the cursor lookup, fetch,
     or save step failed — callers must treat None as a failed run, distinct
-    from a legitimate empty result."""
+    from a legitimate empty result. `interactive=False` (the server's
+    /api/sync) disables the browser-based OAuth flow; AuthenticationRequiredError
+    propagates instead of being swallowed, so the caller can map it to a
+    specific error response."""
     try:
         since_epoch = _compute_since(get_latest_date("santander"))
     except Exception:
@@ -99,7 +102,9 @@ def run_sync(use_remote: bool) -> dict | None:
 
     try:
         logger.info("Fetching Santander transactions...")
-        transactions = fetch_santander(since_epoch)
+        transactions = fetch_santander(since_epoch, interactive=interactive)
+    except AuthenticationRequiredError:
+        raise
     except Exception:
         logger.exception("Failed to fetch Santander transactions")
         return None

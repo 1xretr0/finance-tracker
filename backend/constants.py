@@ -62,7 +62,10 @@ GMAIL_LABEL_SANTANDER = "santander_notifications"
 # File paths
 # ---------------------------------------------------------------------------
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-TOKEN_FILE = os.path.join(_PROJECT_ROOT, "token.json")
+# TOKEN_PATH: overrides where the Gmail OAuth token is read/written. Only
+# token.json (not credentials.json or the ingestion script) needs to be
+# present on a hosted deployment for the server's "Sync now" button to work.
+TOKEN_FILE = os.environ.get("TOKEN_PATH", os.path.join(_PROJECT_ROOT, "token.json"))
 CREDENTIALS_FILE = os.path.join(_PROJECT_ROOT, "credentials.json")
 
 DB_FILENAME = "finance_tracker.db"

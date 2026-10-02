@@ -112,7 +112,7 @@ class TestPushTransactions:
 
 class TestMainUsesRemoteSinkWhenConfigured:
     def test_main_pushes_when_remote_url_set(self, monkeypatch):
-        monkeypatch.setattr(process_transactions, "fetch_santander", lambda since_epoch: [
+        monkeypatch.setattr(process_transactions, "fetch_santander", lambda since_epoch, interactive=True: [
             {"type": "purchase", "amount": 10.0, "date": "2026-01-01"},
         ])
         monkeypatch.setattr(process_transactions, "get_latest_date", lambda source: None)
@@ -126,7 +126,7 @@ class TestMainUsesRemoteSinkWhenConfigured:
 
     def test_main_uses_local_db_when_remote_url_unset(self, monkeypatch):
         monkeypatch.setattr(process_transactions, "REMOTE_API_URL", None)
-        monkeypatch.setattr(process_transactions, "fetch_santander", lambda since_epoch: [
+        monkeypatch.setattr(process_transactions, "fetch_santander", lambda since_epoch, interactive=True: [
             {"type": "purchase", "amount": 10.0, "date": "2026-01-01"},
         ])
         monkeypatch.setattr(process_transactions, "get_latest_date", lambda source: None)
@@ -143,7 +143,7 @@ class TestMainUsesRemoteSinkWhenConfigured:
 
     def test_main_logs_ignored_separately_from_duplicates(self, monkeypatch, caplog):
         monkeypatch.setattr(process_transactions, "REMOTE_API_URL", None)
-        monkeypatch.setattr(process_transactions, "fetch_santander", lambda since_epoch: [
+        monkeypatch.setattr(process_transactions, "fetch_santander", lambda since_epoch, interactive=True: [
             {"type": "purchase", "amount": 1.0, "date": "2026-01-01"},
             {"type": "purchase", "amount": 2.0, "date": "2026-01-02"},
             {"type": "transfer", "amount": 3.0, "date": "2026-01-03"},
@@ -233,8 +233,42 @@ class TestRunSync:
         ) as mock_insert:
             result = process_transactions.run_sync(use_remote=False)
         assert result == {"inserted": 1, "ignored": 0, "duplicates": 0}
-        fetch_mock.assert_called_once_with(None)
+        fetch_mock.assert_called_once_with(None, interactive=True)
         mock_insert.assert_called_once()
+
+    def test_defaults_to_interactive_fetch_when_unspecified(self, monkeypatch):
+        """CLI usage (process_transactions.main()) keeps the interactive OAuth
+        flow available by default; only the server opts out."""
+        monkeypatch.setattr(process_transactions, "REMOTE_API_URL", None)
+        monkeypatch.setattr(process_transactions, "get_latest_date", lambda source: None)
+        fetch_mock = MagicMock(return_value=[])
+        monkeypatch.setattr(process_transactions, "fetch_santander", fetch_mock)
+        process_transactions.run_sync(use_remote=False)
+        fetch_mock.assert_called_once_with(None, interactive=True)
+
+    def test_forwards_interactive_false_to_fetch(self, monkeypatch):
+        monkeypatch.setattr(process_transactions, "REMOTE_API_URL", None)
+        monkeypatch.setattr(process_transactions, "get_latest_date", lambda source: None)
+        fetch_mock = MagicMock(return_value=[])
+        monkeypatch.setattr(process_transactions, "fetch_santander", fetch_mock)
+        process_transactions.run_sync(use_remote=False, interactive=False)
+        fetch_mock.assert_called_once_with(None, interactive=False)
+
+    def test_propagates_authentication_required_error(self, monkeypatch):
+        """A non-interactive run with no refreshable token can't silently
+        swallow the failure into a zero-count result — the caller (the
+        server's /api/sync handler) needs to tell it apart to return 503."""
+        from backend.banks.santander import AuthenticationRequiredError
+
+        monkeypatch.setattr(process_transactions, "REMOTE_API_URL", None)
+        monkeypatch.setattr(process_transactions, "get_latest_date", lambda source: None)
+
+        def raise_auth_error(since_epoch, interactive=True):
+            raise AuthenticationRequiredError("no valid token")
+
+        monkeypatch.setattr(process_transactions, "fetch_santander", raise_auth_error)
+        with pytest.raises(AuthenticationRequiredError):
+            process_transactions.run_sync(use_remote=False, interactive=False)
 
     def test_remote_mode_fetches_since_derived_cursor_and_pushes(self, monkeypatch):
         monkeypatch.setattr(process_transactions, "get_latest_date", lambda source: "2026-06-20T10:00:00")
@@ -263,7 +297,7 @@ class TestRunSync:
 
     def test_returns_zero_counts_when_nothing_fetched(self, monkeypatch):
         monkeypatch.setattr(process_transactions, "get_latest_date", lambda source: None)
-        monkeypatch.setattr(process_transactions, "fetch_santander", lambda since_epoch: [])
+        monkeypatch.setattr(process_transactions, "fetch_santander", lambda since_epoch, interactive=True: [])
         result = process_transactions.run_sync(use_remote=False)
         assert result == {"inserted": 0, "ignored": 0, "duplicates": 0}
 
@@ -299,7 +333,7 @@ class TestRunSync:
         monkeypatch.setattr(process_transactions, "fetch_santander", fetch_mock)
         process_transactions.run_sync(use_remote=True)
         expected = process_transactions._compute_since("2026-06-20T10:00:00")
-        fetch_mock.assert_called_once_with(expected)
+        fetch_mock.assert_called_once_with(expected, interactive=True)
 
     def test_logs_traceback_on_cursor_failure(self, monkeypatch, caplog):
         def raise_connection_error(source):
@@ -330,5 +364,5 @@ class TestMainExitsOnFailure:
         monkeypatch.setattr(process_transactions, "init_db", lambda: None)
         monkeypatch.setattr(process_transactions, "get_summary", lambda: {})
         monkeypatch.setattr(process_transactions, "get_latest_date", lambda source: None)
-        monkeypatch.setattr(process_transactions, "fetch_santander", lambda since_epoch: [])
+        monkeypatch.setattr(process_transactions, "fetch_santander", lambda since_epoch, interactive=True: [])
         process_transactions.main()

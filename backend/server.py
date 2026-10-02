@@ -258,6 +258,35 @@ def api_status():
     return jsonify(get_status())
 
 
+# ---------------------------------------------------------------------------
+# Dashboard-triggered sync ("Sync now"): runs ingestion synchronously on the
+# host itself. Guarded by a non-blocking lock since PythonAnywhere's free
+# tier has no reliable background threads and a single web worker — a
+# concurrent request while a sync is in flight gets 409 instead of racing it.
+# run_sync/AuthenticationRequiredError are imported lazily so the server can
+# still boot if the Google API client libs aren't installed on the host.
+# ---------------------------------------------------------------------------
+_sync_lock = threading.Lock()
+
+
+@app.route("/api/sync", methods=["POST"])
+def api_sync():
+    if not _sync_lock.acquire(blocking=False):
+        return jsonify({"error": "Sync already running"}), 409
+    try:
+        from backend.process_transactions import run_sync
+        from backend.banks.santander import AuthenticationRequiredError
+        try:
+            result = run_sync(use_remote=False, interactive=False)
+        except AuthenticationRequiredError:
+            return jsonify({"error": "Re-authenticate locally and upload token.json"}), 503
+        if result is None:
+            return jsonify({"error": "Sync failed, check server logs"}), 500
+        return jsonify(result)
+    finally:
+        _sync_lock.release()
+
+
 @app.route("/api/uncategorized")
 def api_uncategorized():
     transactions = get_uncategorized()

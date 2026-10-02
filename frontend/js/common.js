@@ -730,6 +730,27 @@ function renderSyncStatus(el, lastSynced) {
     el.classList.toggle("stale", diffDays > 3);
 }
 
+async function triggerSync(button, statusEl) {
+    button.disabled = true;
+    const originalLabel = button.textContent;
+    button.textContent = "Syncing…";
+    try {
+        const res = await apiFetch("/api/sync", { method: "POST" });
+        const data = await res.json();
+        if (!res.ok) {
+            statusEl.textContent = data.error || "Sync failed";
+            return;
+        }
+        statusEl.textContent = `${data.inserted} new`;
+        window.location.reload();
+    } catch (err) {
+        statusEl.textContent = "Sync failed";
+    } finally {
+        button.disabled = false;
+        button.textContent = originalLabel;
+    }
+}
+
 async function initHeaderChrome() {
     const nav = document.querySelector("header nav");
     if (!nav) return;
@@ -737,9 +758,22 @@ async function initHeaderChrome() {
     const statusEl = document.createElement("span");
     statusEl.className = "sync-status";
     statusEl.id = "sync-status";
+
+    const syncBtn = document.createElement("button");
+    syncBtn.type = "button";
+    syncBtn.className = "btn-sync-now";
+    syncBtn.id = "sync-now-btn";
+    syncBtn.textContent = "Sync now";
+    syncBtn.addEventListener("click", () => triggerSync(syncBtn, statusEl));
+
     const userEl = document.getElementById("logged-user");
-    if (userEl) nav.insertBefore(statusEl, userEl);
-    else nav.appendChild(statusEl);
+    if (userEl) {
+        nav.insertBefore(syncBtn, userEl);
+        nav.insertBefore(statusEl, userEl);
+    } else {
+        nav.appendChild(syncBtn);
+        nav.appendChild(statusEl);
+    }
 
     let status;
     try {
