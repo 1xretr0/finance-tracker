@@ -112,10 +112,10 @@ class TestPushTransactions:
 
 class TestMainUsesRemoteSinkWhenConfigured:
     def test_main_pushes_when_remote_url_set(self, monkeypatch):
-        monkeypatch.setattr(process_transactions, "fetch_santander", lambda: [
+        monkeypatch.setattr(process_transactions, "fetch_santander", lambda since_epoch: [
             {"type": "purchase", "amount": 10.0, "date": "2026-01-01"},
         ])
-        monkeypatch.setattr(process_transactions, "save_santander_last_run", lambda: None)
+        monkeypatch.setattr(process_transactions, "get_latest_date", lambda source: None)
         with patch(
             "backend.process_transactions.push_transactions_detailed",
             return_value={"inserted": 1, "ignored": 0, "duplicates": 0},
@@ -126,10 +126,10 @@ class TestMainUsesRemoteSinkWhenConfigured:
 
     def test_main_uses_local_db_when_remote_url_unset(self, monkeypatch):
         monkeypatch.setattr(process_transactions, "REMOTE_API_URL", None)
-        monkeypatch.setattr(process_transactions, "fetch_santander", lambda: [
+        monkeypatch.setattr(process_transactions, "fetch_santander", lambda since_epoch: [
             {"type": "purchase", "amount": 10.0, "date": "2026-01-01"},
         ])
-        monkeypatch.setattr(process_transactions, "save_santander_last_run", lambda: None)
+        monkeypatch.setattr(process_transactions, "get_latest_date", lambda source: None)
         monkeypatch.setattr(process_transactions, "init_db", lambda: None)
         monkeypatch.setattr(process_transactions, "get_summary", lambda: {})
         with patch("backend.process_transactions.push_transactions_detailed") as mock_push, \
@@ -143,12 +143,12 @@ class TestMainUsesRemoteSinkWhenConfigured:
 
     def test_main_logs_ignored_separately_from_duplicates(self, monkeypatch, caplog):
         monkeypatch.setattr(process_transactions, "REMOTE_API_URL", None)
-        monkeypatch.setattr(process_transactions, "fetch_santander", lambda: [
+        monkeypatch.setattr(process_transactions, "fetch_santander", lambda since_epoch: [
             {"type": "purchase", "amount": 1.0, "date": "2026-01-01"},
             {"type": "purchase", "amount": 2.0, "date": "2026-01-02"},
             {"type": "transfer", "amount": 3.0, "date": "2026-01-03"},
         ])
-        monkeypatch.setattr(process_transactions, "save_santander_last_run", lambda: None)
+        monkeypatch.setattr(process_transactions, "get_latest_date", lambda source: None)
         monkeypatch.setattr(process_transactions, "init_db", lambda: None)
         monkeypatch.setattr(process_transactions, "get_summary", lambda: {})
         monkeypatch.setattr(
@@ -159,3 +159,110 @@ class TestMainUsesRemoteSinkWhenConfigured:
         with caplog.at_level(logging.INFO):
             process_transactions.main()
         assert "1 new transaction(s) saved (1 duplicates skipped, 1 internal transfers ignored)" in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# Tests for the DB-derived ingestion cursor (replaces the per-bank last-run
+# file: backend/banks/santander_last_run.txt)
+# ---------------------------------------------------------------------------
+class TestComputeSince:
+    def test_returns_none_when_no_prior_data(self):
+        assert process_transactions._compute_since(None) is None
+
+    def test_subtracts_overlap_window_from_latest_date(self):
+        from datetime import datetime, timedelta
+        from zoneinfo import ZoneInfo
+
+        since_epoch = process_transactions._compute_since("2026-06-20T10:00:00")
+        expected = datetime(2026, 6, 20, 10, 0, 0, tzinfo=ZoneInfo("America/Mexico_City"))
+        expected -= timedelta(hours=process_transactions.SYNC_OVERLAP_HOURS)
+        assert since_epoch == int(expected.timestamp())
+
+    def test_result_is_before_the_latest_date(self):
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+
+        since_epoch = process_transactions._compute_since("2026-06-20T10:00:00")
+        latest_epoch = int(
+            datetime(2026, 6, 20, 10, 0, 0, tzinfo=ZoneInfo("America/Mexico_City")).timestamp()
+        )
+        assert since_epoch < latest_epoch
+
+
+class TestGetLatestDate:
+    def test_remote_mode_reads_from_status_endpoint(self, monkeypatch):
+        monkeypatch.setattr(process_transactions, "REMOTE_API_URL", TEST_REMOTE_URL)
+        res = MagicMock()
+        res.status_code = 200
+        res.json.return_value = {"latest_tx_dates": {"santander": "2026-06-20T10:00:00"}}
+        with patch("backend.process_transactions.requests.get", return_value=res) as mock_get:
+            latest = process_transactions.get_latest_date("santander")
+        assert latest == "2026-06-20T10:00:00"
+        args, kwargs = mock_get.call_args
+        assert args[0] == f"{TEST_REMOTE_URL}/api/status"
+        assert kwargs["headers"]["Authorization"] == f"Bearer {TEST_TOKEN}"
+
+    def test_remote_mode_raises_when_server_unreachable(self, monkeypatch):
+        monkeypatch.setattr(process_transactions, "REMOTE_API_URL", TEST_REMOTE_URL)
+        with patch(
+            "backend.process_transactions.requests.get",
+            side_effect=requests.ConnectionError("refused"),
+        ):
+            with pytest.raises(requests.ConnectionError):
+                process_transactions.get_latest_date("santander")
+
+    def test_local_mode_reads_from_storage(self, monkeypatch):
+        monkeypatch.setattr(process_transactions, "REMOTE_API_URL", None)
+        with patch(
+            "backend.process_transactions.get_latest_tx_date", return_value="2026-05-01T00:00:00"
+        ) as mock_get_latest:
+            latest = process_transactions.get_latest_date("santander")
+        assert latest == "2026-05-01T00:00:00"
+        mock_get_latest.assert_called_once_with(process_transactions.SOURCE_BANKS["santander"])
+
+
+class TestRunSync:
+    def test_local_mode_fetches_since_derived_cursor_and_inserts(self, monkeypatch):
+        monkeypatch.setattr(process_transactions, "REMOTE_API_URL", None)
+        monkeypatch.setattr(process_transactions, "get_latest_date", lambda source: None)
+        fetch_mock = MagicMock(return_value=[{"type": "purchase", "amount": 1.0, "date": "2026-01-01"}])
+        monkeypatch.setattr(process_transactions, "fetch_santander", fetch_mock)
+        with patch(
+            "backend.process_transactions.insert_transactions_detailed",
+            return_value={"inserted": 1, "ignored": 0, "duplicates": 0},
+        ) as mock_insert:
+            result = process_transactions.run_sync(use_remote=False)
+        assert result == {"inserted": 1, "ignored": 0, "duplicates": 0}
+        fetch_mock.assert_called_once_with(None)
+        mock_insert.assert_called_once()
+
+    def test_remote_mode_fetches_since_derived_cursor_and_pushes(self, monkeypatch):
+        monkeypatch.setattr(process_transactions, "get_latest_date", lambda source: "2026-06-20T10:00:00")
+        fetch_mock = MagicMock(return_value=[{"type": "purchase", "amount": 1.0, "date": "2026-06-21"}])
+        monkeypatch.setattr(process_transactions, "fetch_santander", fetch_mock)
+        with patch(
+            "backend.process_transactions.push_transactions_detailed",
+            return_value={"inserted": 1, "ignored": 0, "duplicates": 0},
+        ) as mock_push:
+            result = process_transactions.run_sync(use_remote=True)
+        assert result == {"inserted": 1, "ignored": 0, "duplicates": 0}
+        since_epoch = fetch_mock.call_args[0][0]
+        assert since_epoch is not None
+        mock_push.assert_called_once()
+
+    def test_aborts_without_fetching_when_cursor_lookup_fails(self, monkeypatch):
+        def raise_connection_error(source):
+            raise requests.ConnectionError("refused")
+
+        monkeypatch.setattr(process_transactions, "get_latest_date", raise_connection_error)
+        fetch_mock = MagicMock()
+        monkeypatch.setattr(process_transactions, "fetch_santander", fetch_mock)
+        result = process_transactions.run_sync(use_remote=True)
+        assert result == {"inserted": 0, "ignored": 0, "duplicates": 0}
+        fetch_mock.assert_not_called()
+
+    def test_returns_zero_counts_when_nothing_fetched(self, monkeypatch):
+        monkeypatch.setattr(process_transactions, "get_latest_date", lambda source: None)
+        monkeypatch.setattr(process_transactions, "fetch_santander", lambda since_epoch: [])
+        result = process_transactions.run_sync(use_remote=False)
+        assert result == {"inserted": 0, "ignored": 0, "duplicates": 0}
