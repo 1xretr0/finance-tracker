@@ -12,6 +12,7 @@ from backend.constants import (
     DB_PATH,
     DEFAULT_CATEGORY,
     IGNORED_ACCOUNT_TRANSFERS,
+    SOURCE_BANKS,
     TX_TYPE_PURCHASE,
     TX_TYPE_TRANSFER,
     TX_TYPE_OUTGOING_TRANSFER,
@@ -773,4 +774,30 @@ def get_status() -> dict:
         uncategorized = conn.execute(
             "SELECT COUNT(*) as cnt FROM transactions WHERE category IS NULL"
         ).fetchone()["cnt"]
-        return {"last_synced": last_synced, "uncategorized": uncategorized}
+        latest_tx_dates = {
+            source: get_latest_tx_date(banks) for source, banks in SOURCE_BANKS.items()
+        }
+        return {
+            "last_synced": last_synced,
+            "uncategorized": uncategorized,
+            "latest_tx_dates": latest_tx_dates,
+        }
+
+
+def get_latest_tx_date(banks: list[str]) -> str | None:
+    """Returns the most recent `date` among transactions for the given banks,
+    used by process_transactions.py to derive each ingestion source's Gmail
+    cursor instead of a per-client last-run file. Excludes manually-created
+    transactions (see get_status) so a manual entry can't advance the cursor
+    past emails that were never actually ingested."""
+    if not banks:
+        return None
+    with _connection() as conn:
+        placeholders = ",".join("?" * len(banks))
+        row = conn.execute(
+            f"SELECT MAX(date) as latest FROM transactions "
+            f"WHERE bank IN ({placeholders}) "
+            f"AND (reference IS NULL OR reference NOT LIKE 'MAN-%')",
+            banks,
+        ).fetchone()
+        return row["latest"]

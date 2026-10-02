@@ -20,6 +20,20 @@ BANKS_SET = (
 )
 
 # ---------------------------------------------------------------------------
+# Ingestion sources -> the `bank` values they can write (used to derive each
+# source's Gmail "after:" cursor from the newest stored transaction instead
+# of a per-client last-run file; see get_latest_tx_date in storage.py).
+# ---------------------------------------------------------------------------
+SOURCE_BANKS = {
+	"santander": [BANK_SANTANDER, BANK_SANTANDER_LIKEU, BANK_SANTANDER_GOLD],
+}
+
+# Overlap window subtracted from the derived cursor so a message that lands
+# mid-run (or in a gap missed by a previous overlap) is still re-queried;
+# duplicates in that window are deduped by idx_dedup, so widening this is safe.
+SYNC_OVERLAP_HOURS = 48
+
+# ---------------------------------------------------------------------------
 # Transaction types
 # ---------------------------------------------------------------------------
 TX_TYPE_PURCHASE = "purchase"
@@ -50,9 +64,7 @@ GMAIL_LABEL_SANTANDER = "santander_notifications"
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TOKEN_FILE = os.path.join(_PROJECT_ROOT, "token.json")
 CREDENTIALS_FILE = os.path.join(_PROJECT_ROOT, "credentials.json")
-SANTANDER_LAST_RUN_FILE = os.path.join(
-    os.path.dirname(__file__), "banks", "santander_last_run.txt"
-)
+
 DB_FILENAME = "finance_tracker.db"
 _DEFAULT_DB_PATH = os.path.join(os.path.dirname(__file__), "db", DB_FILENAME)
 DB_PATH = os.environ.get("DB_PATH", _DEFAULT_DB_PATH)

@@ -26,7 +26,6 @@ The server and DB can be deployed to a public host (e.g. PythonAnywhere) so `/ap
 - `backend/constants.py` — Shared constants (tx types, banks, paths, labels, `UPDATABLE_FIELDS`, `SETTINGS_KEYS`, `IGNORED_ACCOUNT_TRANSFERS` seed)
 - `backend/process_transactions.py` — Fetch from Gmail and store (run manually)
 - `backend/banks/santander.py` — Gmail fetcher + parsers for 4 email formats (purchase field-style, purchase narrative, transfer, outgoing_transfer); internal-transfer filtering lives in storage, not here
-- `backend/banks/santander_last_run.txt` — Epoch timestamp of last Gmail fetch (runtime, DO NOT commit)
 - `backend/db/finance_tracker.db` — SQLite database (DO NOT commit)
 - `frontend/html/` — Page templates (index, categorize, transactions, settings, login)
 - `frontend/css/` — Stylesheets (shared `styles.css` + page-specific: `categorize.css`, `transactions.css`, `settings.css`, `login.css`)
@@ -52,7 +51,9 @@ The server and DB can be deployed to a public host (e.g. PythonAnywhere) so `/ap
 
 ## Multi-Bank Design
 
-The system is designed to support multiple transaction sources. Santander MX is the first integration; additional banks will be added later. Each bank module exposes `fetch_transactions() -> list[dict]`. Storage and dashboard layers are source-agnostic.
+The system is designed to support multiple transaction sources. Santander MX is the first integration; additional banks will be added later. Each bank module exposes `fetch_transactions(since_epoch: int | None = None) -> list[dict]` and pages through its API's full result set itself (no fixed result cap). Storage and dashboard layers are source-agnostic.
+
+Ingestion is stateless — there's no per-bank last-run file to sync across machines. `process_transactions.py` derives each source's fetch cursor from the newest transaction already stored for that source's banks (`get_latest_tx_date` in `storage.py`, surfaced to remote clients via `GET /api/status`'s `latest_tx_dates`), pulled back by `SYNC_OVERLAP_HOURS` (`constants.py`) so nothing near the boundary is missed; duplicates from the overlap are deduped by the DB's unique index. `SOURCE_BANKS` (`constants.py`) maps each source name to the `bank` values its parsers write.
 
 ## Commands
 
@@ -79,7 +80,7 @@ The system is designed to support multiple transaction sources. Santander MX is 
 - `GET /api/savings` — monthly savings for a year (param: `year`)
 - `GET /api/breakdown` — income/expense grouped by category for a `month` (`YYYY-MM`) or a whole `year` (`YYYY`)
 - `GET /api/recurring` — recurring merchants for a `month` (3+ consecutive months, amounts within ±20% of median)
-- `GET /api/status` — `{last_synced, uncategorized}` sync-freshness + uncategorized count
+- `GET /api/status` — `{last_synced, uncategorized, latest_tx_dates}` sync-freshness + uncategorized count + per-source ingestion cursor (used by `process_transactions.py` in remote mode)
 - `GET /api/uncategorized` — transactions with no category assigned, each with a `suggested_category`
 - `PUT /api/transactions/categorize` — batch assign categories `[{id, category}]`
 - `POST /api/transactions` — manually create a transaction `{type, amount, date, ...}` (returns `409` on duplicate, `200 {"ignored": true}` if it matches an ignored-transfer rule)

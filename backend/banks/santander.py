@@ -27,7 +27,6 @@ from backend.constants import (
 	GMAIL_LABEL_SANTANDER,
 	TOKEN_FILE,
 	CREDENTIALS_FILE,
-	SANTANDER_LAST_RUN_FILE,
 	DATE_FORMAT_TX,
 	MONTHS_ES,
 	PATTERN_INCOMING_TRANSFER_UPPER,
@@ -45,81 +44,68 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Gmail fetch & orchestration
 # ---------------------------------------------------------------------------
-def fetch_transactions() -> list[dict]:
-	"""Fetches Santander purchase notifications from Gmail and returns parsed transactions."""
+def fetch_transactions(since_epoch: int | None = None) -> list[dict]:
+	"""Fetches Santander purchase notifications from Gmail and returns parsed
+	transactions. Stateless: the caller (process_transactions.py) derives
+	`since_epoch` from the DB's newest stored transaction for this source
+	instead of a per-client last-run file; `None` fetches the whole label.
+	Pages through the full result set via `nextPageToken` — GMAIL_MAX_RESULTS
+	is only the page size, not a hard cap."""
 	service = build(
 		GMAIL_SERVICE_NAME, GMAIL_SERVICE_VERSION, credentials=_authenticate()
 	)
 
 	query = f"label:{GMAIL_LABEL_SANTANDER}"
-	last_run = _get_last_run_date()
-	if last_run:
-		query += f" after:{last_run}"
+	if since_epoch is not None:
+		query += f" after:{since_epoch}"
 
-	results = (
-		service.users()
-		.messages()
-		.list(userId=GMAIL_USER_ID, q=query, maxResults=GMAIL_MAX_RESULTS)
-		.execute()
-	)
-
-	messages = results.get("messages", [])
 	transactions = []
-
-	if not messages:
-		logger.warning("No new Santander notifications found.")
-		return transactions
-
-	for msg_ref in messages:
-		msg = (
+	any_messages = False
+	page_token = None
+	while True:
+		results = (
 			service.users()
 			.messages()
-			.get(userId=GMAIL_USER_ID, id=msg_ref["id"], format="full")
+			.list(userId=GMAIL_USER_ID, q=query, maxResults=GMAIL_MAX_RESULTS, pageToken=page_token)
 			.execute()
 		)
 
-		plain_body = _extract_plain_body(msg["payload"])
-		if not plain_body:
-			continue
-
-		tx = parse_transaction(plain_body)
-		if tx:
-			transactions.append(tx)
-			label = (
-				tx.get("merchant")
-				or tx.get("dest_bank")
-				or tx.get("sender_bank")
-				or tx["type"]
+		messages = results.get("messages", [])
+		any_messages = any_messages or bool(messages)
+		for msg_ref in messages:
+			msg = (
+				service.users()
+				.messages()
+				.get(userId=GMAIL_USER_ID, id=msg_ref["id"], format="full")
+				.execute()
 			)
-			logger.info(f"  ✓ {tx['date']} | ${tx['amount']:.2f} | {label} ({tx['type']})")
-		else:
-			subject = _get_header(msg["payload"], "Subject")
-			logger.warning(f"  ⚠ Could not parse transaction from: {subject}")
+
+			plain_body = _extract_plain_body(msg["payload"])
+			if not plain_body:
+				continue
+
+			tx = parse_transaction(plain_body)
+			if tx:
+				transactions.append(tx)
+				label = (
+					tx.get("merchant")
+					or tx.get("dest_bank")
+					or tx.get("sender_bank")
+					or tx["type"]
+				)
+				logger.info(f"  ✓ {tx['date']} | ${tx['amount']:.2f} | {label} ({tx['type']})")
+			else:
+				subject = _get_header(msg["payload"], "Subject")
+				logger.warning(f"  ⚠ Could not parse transaction from: {subject}")
+
+		page_token = results.get("nextPageToken")
+		if not page_token:
+			break
+
+	if not any_messages:
+		logger.warning("No new Santander notifications found.")
 
 	return transactions
-
-# ---------------------------------------------------------------------------
-# Last run tracking
-# ---------------------------------------------------------------------------
-def _get_last_run_date() -> str | None:
-	if os.path.exists(SANTANDER_LAST_RUN_FILE):
-		with open(SANTANDER_LAST_RUN_FILE) as f:
-			date = f.read().strip()
-			logger.info(f"Last run date: {date}")
-			return date
-
-	logger.warning("No last run date file found!")
-	return None
-
-
-def save_last_run_date():
-	from zoneinfo import ZoneInfo
-
-	epoch = int(datetime.now(ZoneInfo("America/Mexico_City")).timestamp())
-	with open(SANTANDER_LAST_RUN_FILE, "w") as f:
-		f.write(str(epoch))
-
-	logger.info("Last run date saved!")
 
 # ---------------------------------------------------------------------------
 # Gmail OAuth authentication
