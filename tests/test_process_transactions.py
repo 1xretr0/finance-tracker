@@ -258,7 +258,7 @@ class TestRunSync:
         fetch_mock = MagicMock()
         monkeypatch.setattr(process_transactions, "fetch_santander", fetch_mock)
         result = process_transactions.run_sync(use_remote=True)
-        assert result == {"inserted": 0, "ignored": 0, "duplicates": 0}
+        assert result is None
         fetch_mock.assert_not_called()
 
     def test_returns_zero_counts_when_nothing_fetched(self, monkeypatch):
@@ -266,3 +266,69 @@ class TestRunSync:
         monkeypatch.setattr(process_transactions, "fetch_santander", lambda since_epoch: [])
         result = process_transactions.run_sync(use_remote=False)
         assert result == {"inserted": 0, "ignored": 0, "duplicates": 0}
+
+    def test_returns_none_when_fetch_fails(self, monkeypatch):
+        monkeypatch.setattr(process_transactions, "get_latest_date", lambda source: None)
+
+        def raise_fetch_error(since_epoch):
+            raise RuntimeError("Gmail API error")
+
+        monkeypatch.setattr(process_transactions, "fetch_santander", raise_fetch_error)
+        with patch("backend.process_transactions.insert_transactions_detailed") as mock_insert:
+            result = process_transactions.run_sync(use_remote=False)
+        assert result is None
+        mock_insert.assert_not_called()
+
+    def test_returns_none_when_save_fails(self, monkeypatch):
+        monkeypatch.setattr(process_transactions, "get_latest_date", lambda source: None)
+        monkeypatch.setattr(process_transactions, "fetch_santander", lambda since_epoch: [
+            {"type": "purchase", "amount": 1.0, "date": "2026-01-01"},
+        ])
+        with patch(
+            "backend.process_transactions.insert_transactions_detailed",
+            side_effect=RuntimeError("db locked"),
+        ):
+            result = process_transactions.run_sync(use_remote=False)
+        assert result is None
+
+    def test_remote_mode_cursor_matches_compute_since(self, monkeypatch):
+        """The epoch handed to fetch_santander must be _compute_since's output
+        for the derived latest date, not merely non-None."""
+        monkeypatch.setattr(process_transactions, "get_latest_date", lambda source: "2026-06-20T10:00:00")
+        fetch_mock = MagicMock(return_value=[])
+        monkeypatch.setattr(process_transactions, "fetch_santander", fetch_mock)
+        process_transactions.run_sync(use_remote=True)
+        expected = process_transactions._compute_since("2026-06-20T10:00:00")
+        fetch_mock.assert_called_once_with(expected)
+
+    def test_logs_traceback_on_cursor_failure(self, monkeypatch, caplog):
+        def raise_connection_error(source):
+            raise requests.ConnectionError("refused")
+
+        monkeypatch.setattr(process_transactions, "get_latest_date", raise_connection_error)
+        with caplog.at_level(logging.ERROR):
+            process_transactions.run_sync(use_remote=True)
+        exc_records = [r for r in caplog.records if r.exc_info is not None]
+        assert exc_records, "expected a log record with a captured traceback"
+
+
+class TestMainExitsOnFailure:
+    def test_main_exits_nonzero_when_sync_fails(self, monkeypatch):
+        monkeypatch.setattr(process_transactions, "REMOTE_API_URL", None)
+        monkeypatch.setattr(process_transactions, "init_db", lambda: None)
+
+        def raise_cursor_error(source):
+            raise RuntimeError("boom")
+
+        monkeypatch.setattr(process_transactions, "get_latest_date", raise_cursor_error)
+        with pytest.raises(SystemExit) as exc_info:
+            process_transactions.main()
+        assert exc_info.value.code == 1
+
+    def test_main_does_not_exit_when_sync_succeeds(self, monkeypatch):
+        monkeypatch.setattr(process_transactions, "REMOTE_API_URL", None)
+        monkeypatch.setattr(process_transactions, "init_db", lambda: None)
+        monkeypatch.setattr(process_transactions, "get_summary", lambda: {})
+        monkeypatch.setattr(process_transactions, "get_latest_date", lambda source: None)
+        monkeypatch.setattr(process_transactions, "fetch_santander", lambda since_epoch: [])
+        process_transactions.main()

@@ -144,3 +144,21 @@ class TestPagination:
         with patcher:
             transactions = fetch_transactions()
         assert len(transactions) == 2
+
+    def test_unparsable_message_is_skipped_and_later_pages_still_processed(self):
+        """A message that fails to parse (e.g. an unrecognized notification
+        format) must not abort the fetch or truncate later pages."""
+        unparsable_body = _plain_text_payload("Some unrelated notification with no transaction data.")
+        bodies = {
+            "m1": unparsable_body,
+            "m2": _plain_text_payload(PURCHASE_EMAIL),
+        }
+        pages = [
+            {"messages": [{"id": "m1"}], "nextPageToken": "page2"},
+            {"messages": [{"id": "m2"}]},
+        ]
+        fake_messages, patcher = _patch_gmail(pages, bodies)
+        with patcher:
+            transactions = fetch_transactions(since_epoch=None)
+        assert len(transactions) == 1
+        assert len(fake_messages.list_calls) == 2
