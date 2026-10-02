@@ -775,7 +775,7 @@ def get_status() -> dict:
             "SELECT COUNT(*) as cnt FROM transactions WHERE category IS NULL"
         ).fetchone()["cnt"]
         latest_tx_dates = {
-            source: get_latest_tx_date(banks) for source, banks in SOURCE_BANKS.items()
+            source: get_latest_tx_date(banks, conn) for source, banks in SOURCE_BANKS.items()
         }
         return {
             "last_synced": last_synced,
@@ -784,7 +784,7 @@ def get_status() -> dict:
         }
 
 
-def get_latest_tx_date(banks: list[str]) -> str | None:
+def get_latest_tx_date(banks: list[str], conn: sqlite3.Connection | None = None) -> str | None:
     """Returns the most recent `date` among transactions for the given banks,
     used by process_transactions.py to derive each ingestion source's Gmail
     cursor instead of a per-client last-run file. Excludes manually-created
@@ -792,12 +792,14 @@ def get_latest_tx_date(banks: list[str]) -> str | None:
     past emails that were never actually ingested."""
     if not banks:
         return None
-    with _connection() as conn:
-        placeholders = ",".join("?" * len(banks))
-        row = conn.execute(
-            f"SELECT MAX(date) as latest FROM transactions "
-            f"WHERE bank IN ({placeholders}) "
-            f"AND (reference IS NULL OR reference NOT LIKE 'MAN-%')",
-            banks,
-        ).fetchone()
-        return row["latest"]
+    if conn is None:
+        with _connection() as new_conn:
+            return get_latest_tx_date(banks, new_conn)
+    placeholders = ",".join("?" * len(banks))
+    row = conn.execute(
+        f"SELECT MAX(date) as latest FROM transactions "
+        f"WHERE bank IN ({placeholders}) "
+        f"AND (reference IS NULL OR reference NOT LIKE 'MAN-%')",
+        banks,
+    ).fetchone()
+    return row["latest"]
