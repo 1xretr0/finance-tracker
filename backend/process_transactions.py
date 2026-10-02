@@ -2,6 +2,7 @@
 # Transaction ingestion orchestrator
 # ---------------------------------------------------------------------------
 import logging
+import sys
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -84,22 +85,24 @@ def get_latest_date(source: str) -> str | None:
 # ---------------------------------------------------------------------------
 # Main workflow
 # ---------------------------------------------------------------------------
-def run_sync(use_remote: bool) -> dict:
+def run_sync(use_remote: bool) -> dict | None:
     """Fetches and stores new Santander transactions since the DB-derived
-    cursor. Returns {"inserted", "ignored", "duplicates"} (all zero if the
-    cursor lookup failed, the fetch failed, or nothing new was found)."""
+    cursor. Returns {"inserted", "ignored", "duplicates"} (zero counts if
+    nothing new was found) on success, or None if the cursor lookup, fetch,
+    or save step failed — callers must treat None as a failed run, distinct
+    from a legitimate empty result."""
     try:
         since_epoch = _compute_since(get_latest_date("santander"))
-    except Exception as e:
-        logger.error(f"Failed to read last sync date: {e}")
-        return dict(ZERO_RESULT)
+    except Exception:
+        logger.exception("Failed to read last sync date")
+        return None
 
     try:
         logger.info("Fetching Santander transactions...")
         transactions = fetch_santander(since_epoch)
-    except Exception as e:
-        logger.error(f"Failed to fetch Santander transactions: {e}")
-        return dict(ZERO_RESULT)
+    except Exception:
+        logger.exception("Failed to fetch Santander transactions")
+        return None
 
     if not transactions:
         logger.warning("No transactions to save.")
@@ -117,9 +120,9 @@ def run_sync(use_remote: bool) -> dict:
             f"{result['ignored']} internal transfers ignored)"
         )
         return result
-    except Exception as e:
-        logger.error(f"Failed to save transactions: {e}")
-        return dict(ZERO_RESULT)
+    except Exception:
+        logger.exception("Failed to save transactions")
+        return None
 
 
 def main():
@@ -127,7 +130,8 @@ def main():
     if not use_remote:
         init_db()
 
-    run_sync(use_remote)
+    if run_sync(use_remote) is None:
+        sys.exit(1)
 
     if not use_remote:
         summary = get_summary()
