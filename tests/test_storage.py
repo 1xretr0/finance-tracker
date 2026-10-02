@@ -10,7 +10,7 @@ from backend.db.storage import (
     update_category, delete_category, update_transaction, delete_transaction,
     get_user, get_breakdown, get_recurring, get_setting, set_setting,
     get_ignored_transfers, create_ignored_transfer, delete_ignored_transfer,
-    get_status, is_ignored_transfer, _connection,
+    get_status, is_ignored_transfer, _connection, get_latest_tx_date,
 )
 import backend.db.storage as storage
 
@@ -851,3 +851,47 @@ class TestStatus:
     def test_includes_ingested_transactions_in_last_synced(self):
         insert_transactions([make_purchase()])
         assert get_status()["last_synced"] is not None
+
+
+# ---------------------------------------------------------------------------
+# Test suite: Latest transaction date (ingestion cursor source)
+# ---------------------------------------------------------------------------
+class TestGetLatestTxDate:
+    def test_returns_none_for_empty_db(self):
+        assert get_latest_tx_date(["santander"]) is None
+
+    def test_returns_max_date_for_single_bank(self):
+        insert_transactions([
+            make_purchase(date="2026-06-15T15:01:07"),
+            make_purchase(date="2026-06-20T10:00:00"),
+        ])
+        assert get_latest_tx_date(["santander"]) == "2026-06-20T10:00:00"
+
+    def test_returns_max_date_across_multiple_banks(self):
+        insert_transactions([make_purchase(date="2026-06-10T08:00:00")])
+        tx = make_purchase(date="2026-06-25T09:00:00")
+        tx["bank"] = "santander likeu"
+        insert_transactions([tx])
+        assert get_latest_tx_date(["santander", "santander likeu"]) == "2026-06-25T09:00:00"
+
+    def test_ignores_banks_not_in_list(self):
+        tx = make_purchase(date="2026-06-25T09:00:00")
+        tx["bank"] = "bbva"
+        insert_transactions([tx])
+        assert get_latest_tx_date(["santander"]) is None
+
+    def test_excludes_manual_transactions(self):
+        insert_transactions([make_purchase(date="2026-06-10T08:00:00")])
+        manual = make_purchase(date="2026-06-30T12:00:00")
+        manual["reference"] = "MAN-1700000000-123"
+        insert_transactions([manual])
+        assert get_latest_tx_date(["santander"]) == "2026-06-10T08:00:00"
+
+    def test_includes_latest_tx_dates_in_status(self):
+        insert_transactions([make_purchase(date="2026-06-15T15:01:07")])
+        status = get_status()
+        assert status["latest_tx_dates"]["santander"] == "2026-06-15T15:01:07"
+
+    def test_latest_tx_dates_source_is_none_when_no_data(self):
+        status = get_status()
+        assert status["latest_tx_dates"]["santander"] is None
