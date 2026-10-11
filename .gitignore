@@ -26,3 +26,6 @@ __pycache__/
 # debugging
 tests/gmail_responses/*
 tests/*.txt
+
+# local skills
+.claude/

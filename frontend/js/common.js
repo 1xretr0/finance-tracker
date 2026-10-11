@@ -32,7 +32,7 @@ const EXPENSE_COLORS = [
 const API_TOKEN_STORAGE_KEY = "financeTrackerApiToken";
 const API_USER_STORAGE_KEY = "financeTrackerUsername";
 
-const BANKS_LIST = ["SANTANDER", "SANTANDER LIKEU", "SANTANDER GOLD", "MERCADO PAGO", "BBVA", "BBVA AZUL"]
+const BANKS_LIST = ["SANTANDER", "SANTANDER LIKEU", "SANTANDER GOLD", "OPENBANK", "MERCADO PAGO", "BBVA", "BBVA AZUL"]
 
 // ---------------------------------------------------------------------------
 // Utility functions
