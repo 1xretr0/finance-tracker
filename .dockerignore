@@ -1,12 +1,12 @@
 .git
 .venv
-.env
+**/.env
 data
-*.db*
-credentials.json
-token.json
+**/*.db*
+**/credentials.json
+**/token.json
 tests
 docs
 .claude
 .superpowers
-__pycache__
+**/__pycache__
