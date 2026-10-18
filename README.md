@@ -1,18 +1,78 @@
 # Finance Tracker
 
-Personal finance tracker that aggregates transaction data from multiple bank sources into a unified local dashboard.
+A self-hosted personal finance tracker. It reads your Santander Mexico notification emails from Gmail, parses each purchase and transfer, stores them in a local SQLite database, and shows them in a dark-mode dashboard (Flask API + vanilla JS + Chart.js) that you can also install as a PWA. Your data stays on your own machine or server; the only outside service involved is the Gmail API, read-only.
 
-## How it works
+## Quickstart (local)
 
-1. Bank notification emails arrive in Gmail and are auto-labeled
-2. `process_transactions` fetches new emails since the last run, parses transaction data, and either stores it in local SQLite or pushes it to a hosted API (see [Hosting & auth](#hosting--auth))
-3. A Flask server exposes a JSON API and serves a dark-mode dashboard with Chart.js visualizations. All `/api/*` routes require a bearer token
+Requires Python 3.11+ and Gmail API credentials (see [Gmail setup](#gmail-setup); do that first and save the downloaded file as `credentials.json` in the project root).
 
-## Supported banks
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 
-### Santander Mexico (`backend/banks/santander.py`)
+cp .env.example .env
+```
 
-Parses four notification email formats:
+Edit `.env` and fill in:
+
+- `API_TOKEN`: a shared secret that every `/api/*` request must carry. Generate one with `python -c "import secrets; print(secrets.token_urlsafe(32))"`. Without it the API answers `503` to everything, even on localhost.
+- `ADMIN_USERNAME` and `ADMIN_PASSWORD`: the dashboard login. They create one user the first time the database is initialised and only if the users table is empty. Leave either blank and no user is created, so you cannot sign in.
+
+Then fetch your transactions once and start the dashboard:
+
+```bash
+python -m backend.process_transactions   # first run opens a browser for Gmail consent
+python -m backend.server                 # http://localhost:5000
+```
+
+Open http://localhost:5000, sign in with `ADMIN_USERNAME`/`ADMIN_PASSWORD`, and use the "Sync now" button (or re-run `python -m backend.process_transactions`) whenever you want new transactions.
+
+The database is `backend/db/finance_tracker.db` unless you set `DATA_DIR` or `DB_PATH`.
+
+## Quickstart (Docker)
+
+```bash
+cp .env.example .env          # compose reads it via env_file; it fails if missing
+# edit .env: set API_TOKEN, ADMIN_USERNAME, ADMIN_PASSWORD (see above)
+
+mkdir -p data
+sudo chown 1000:1000 data     # Linux only, see note below
+cp /path/to/credentials.json data/credentials.json
+
+docker compose up -d          # builds the image on first run; dashboard at http://localhost:5000
+```
+
+Then authorise Gmail once. This runs the ingestion command inside the image with the OAuth callback port published:
+
+```bash
+docker compose run --rm -p 8765:8765 app python -m backend.process_transactions
+```
+
+It prints a Google consent URL; open it in a browser on the same machine (the callback goes to `http://localhost:8765`). The resulting `token.json` is saved in `./data` and the first sync runs immediately. After that, the dashboard's "Sync now" button works too.
+
+Notes:
+
+- The container runs as uid 1000. On Linux, Docker creates a missing `./data` as root, so create it first and `chown 1000:1000` it as shown, or the app cannot write the database. Docker Desktop on macOS/Windows is usually not affected.
+- The compose file maps `5000:5000` and the image listens on 5000. Do not set `PORT` in `.env` when using it.
+- Compose does not publish 8765 by default; the `-p 8765:8765` above is only needed for the one-off authorisation.
+- If Docker runs on a remote machine, `localhost:8765` in your own browser will not reach it. Either tunnel the port (`ssh -L 8765:localhost:8765 user@host`) or authorise on a machine with a browser and copy `token.json` into the data directory.
+- Everything persistent is in `./data` (SQLite database, `token.json`, `credentials.json`). Back it up by copying that directory. `docker compose down && docker compose up -d` keeps your data.
+
+## Gmail setup
+
+1. Create a project in the [Google Cloud console](https://console.cloud.google.com/).
+2. Enable the **Gmail API** for that project.
+3. Create an OAuth client ID of type **Desktop app** and download the JSON as `credentials.json` (project root for a local run, the data directory for Docker or a host).
+4. Configure the OAuth consent screen (add yourself as a user) and set its publishing status to **"In production"**. A consent screen left in "Testing" makes refresh tokens expire after 7 days, so ingestion would break weekly. You do not need to go through Google verification for personal use; you will just see an "unverified app" warning once during consent.
+5. In Gmail, create a label named `santander_notifications`.
+6. Create a filter that applies that label to mail from the two Santander sender addresses: `santander@envio.santander.com.mx` and `notificaciones@notificaciones.santander.com.mx`.
+
+The app only requests the read-only Gmail scope (`gmail.readonly`) and only reads messages carrying that label. It fetches everything on the first run, then only messages newer than the newest stored transaction (minus a 48 hour overlap; duplicates are discarded by a unique index).
+
+### Supported email formats
+
+Four Santander notification formats are parsed (`backend/banks/santander.py`):
 
 | Type | Description | Key fields |
 |------|-------------|------------|
@@ -21,131 +81,110 @@ Parses four notification email formats:
 | `transfer` | Incoming deposit | account_last4, amount, sender_bank, source_account, tracking_key, concept |
 | `outgoing_transfer` | Interbank transfer sent via SuperMovil | account_last4, dest_account_last4, dest_bank, amount, reference |
 
-**Gmail label:** `santander_notifications`
+Other banks can be added; see [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## Setup
+## Deploying to a host
 
-### Prerequisites
+You can run the server on a VPS or a Python web host so the dashboard is reachable from your phone. The simplest setup keeps everything on the host: the server, the database, and Gmail ingestion triggered from the dashboard's "Sync now" button.
 
-- Python 3.11+
-- A Google Cloud project with the Gmail API enabled
-- OAuth 2.0 credentials (`credentials.json`) for the Gmail API
+1. Get the code onto the host and `pip install -r requirements.txt`.
+2. Put your configuration in `.env` in the project root (or set real environment variables, which win over `.env`). At minimum `API_TOKEN`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`; usually also `DATA_DIR` pointing at a persistent directory.
+3. Authorise Gmail on a machine with a browser (`python -m backend.process_transactions` locally) and copy the resulting `token.json` into the host's data directory (or wherever `TOKEN_PATH` points). `credentials.json` and the ingestion CLI do not need to be on the host: "Sync now" only needs `token.json`. If the token is missing or can no longer be refreshed, the sync returns `503` and you repeat this step.
+4. Run the app with gunicorn using **exactly one worker**; the failed-login lockout and the sync lock live in process memory:
 
-### Installation
+   ```bash
+   gunicorn backend.server:app --bind 0.0.0.0:5000 --workers 1 --threads 4 --timeout 300
+   ```
 
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+   The long timeout is because `POST /api/sync` runs the whole Gmail ingestion inside one request. Put a reverse proxy with HTTPS in front (see [Security notes](#security-notes)).
+
+### PythonAnywhere
+
+Create a web app on a manual-configuration Python version, install `requirements.txt` into its virtualenv, and edit the WSGI file so it imports the Flask app:
+
+```python
+import sys
+sys.path.insert(0, "/path/to/your/finance-tracker")   # the project checkout
+
+from backend.server import app as application
 ```
 
-### Gmail configuration
+Set the environment variables in the project's `.env` (or in the web tab), including `DATA_DIR` pointing at a directory that persists. To have the optional [auto-deploy webhook](#auto-deploy-on-push) reload the app, set `DEPLOY_REPO_DIR` to the checkout and `DEPLOY_RELOAD_FILE` to the path of that WSGI file (the app touches it, which makes PythonAnywhere reload). The database schema is created on the first request, so no extra step is needed. PythonAnywhere terminates HTTPS for you. Set `TRUST_PROXY=true` there only if its proxy forwards `X-Forwarded-For` (check that the client IP your app sees is not the same for everyone); otherwise leave it off.
 
-1. Create a Gmail label called `santander_notifications`
-2. Set up a filter to auto-label emails from `santander@envio.santander.com.mx` and `notificaciones@notificaciones.santander.com.mx`
-3. Place your Google OAuth `credentials.json` in the project root
+## Configuration
 
-### First run
+Configuration is read from environment variables, optionally loaded from a `.env` file in the project root (via python-dotenv). Real environment variables always win over `.env` values. Set `ENV_FILE` to load a `.env` from somewhere else. [`.env.example`](.env.example) lists everything; copy it to `.env`.
 
-```bash
-python -m backend.process_transactions
-```
-
-On first run, a browser window will open for OAuth consent. The token is saved to `token.json` for subsequent runs.
-
-## Hosting & auth
-
-The server and its SQLite DB can be deployed to a public host (e.g. PythonAnywhere) so `/api/transactions` is reachable from outside `localhost` — for example, so a phone can create transactions directly. Gmail ingestion keeps running locally (it needs the Google OAuth files, which never leave your machine) and pushes parsed transactions to the hosted API instead of writing to a local DB.
-
-All configuration is via environment variables (`backend/constants.py`):
-
-| Variable | Where set | Purpose |
+| Variable | Default | Purpose |
 |---|---|---|
-| `API_TOKEN` | Host + local machine | Shared secret required as `Authorization: Bearer <token>` on every `/api/*` request, compared with a constant-time check. If unset on the server, all `/api/*` requests are rejected with `503` (fails closed, never runs open). |
-| `DB_PATH` | Host | Overrides the default `backend/db/finance_tracker.db` location, e.g. a persistent dir outside the deployed code. |
-| `REMOTE_API_URL` | Local machine | When set, `process_transactions` POSTs fetched transactions to `<REMOTE_API_URL>/api/transactions` with the bearer token instead of writing to a local DB. Duplicates (`409`) are skipped, same as local dedup. |
-| `FLASK_DEBUG` | Host + local machine | Set to `true` to enable Flask's reloader and interactive debugger. Defaults to off — must stay off on any publicly reachable host, since the debugger allows remote code execution if triggered. |
+| `API_TOKEN` | none (required) | Shared secret sent as `Authorization: Bearer <token>` on every `/api/*` request. If unset the API returns `503`. |
+| `ADMIN_USERNAME`, `ADMIN_PASSWORD` | none | Seed one dashboard user when the users table is empty. Blank means no user. `/api/login` checks these credentials and returns `API_TOKEN` to the browser. |
+| `DATA_DIR` | unset | Directory holding `finance_tracker.db`, `token.json` and `credentials.json`. Unset keeps the in-repo defaults (`backend/db/` for the database, project root for the others). The Docker image sets `/data`. |
+| `DB_PATH`, `TOKEN_PATH`, `CREDENTIALS_PATH` | inside `DATA_DIR` | Override the location of an individual file. These take precedence over `DATA_DIR`. |
+| `PORT` | `5000` | Port for `python -m backend.server` and for the Docker image's gunicorn. |
+| `TRUST_PROXY` | `false` | Trust one hop of `X-Forwarded-For` so the lockout sees real client IPs. Only behind a reverse proxy. |
+| `FLASK_DEBUG` | `false` | Flask reloader and interactive debugger. Local development only. |
+| `OAUTH_BIND_ADDR` | `localhost` | Address the Gmail OAuth callback listens on (port is fixed at 8765). The Docker image sets `0.0.0.0`. |
+| `REMOTE_API_URL` | unset | See [split ingest](#split-ingest-remote-push). |
+| `GITHUB_WEBHOOK_SECRET`, `DEPLOY_REPO_DIR`, `DEPLOY_RELOAD_FILE` | unset | See [auto-deploy on push](#auto-deploy-on-push). |
+| `ENV_FILE` | `<project>/.env` | Path of the `.env` file to load. Must be a real environment variable (it cannot be set inside `.env`). |
 
-To deploy only `backend/server.py`, `backend/db/storage.py`, `backend/constants.py`, and `frontend/` — the ingestion script and Google credentials stay local and are never uploaded.
+## Advanced
 
-The dashboard prompts for the API token on first load and stores it in `localStorage`; it's cleared automatically if a request comes back `401`.
+### Split ingest (remote push)
 
-Repeated failed-auth attempts are throttled per source IP: after 10 failures within a 5-minute window, that IP gets `429` on every `/api/*` request (token or not) until the window rolls off. This state is in-memory and resets on restart. If you put the server behind a reverse proxy, make sure it forwards the real client IP — otherwise every client behind the proxy shares one lockout bucket.
+Instead of running everything on one machine, you can host only the server and database, and keep Gmail ingestion on a machine that has your OAuth files. On the ingestion machine set `REMOTE_API_URL=https://example.com` and the same `API_TOKEN` as the server. `python -m backend.process_transactions` then POSTs each parsed transaction to `<REMOTE_API_URL>/api/transactions` with the bearer token instead of writing a local DB, and asks `GET /api/status` for the newest stored transaction to derive its fetch cursor. Duplicates (`409`) and internal transfers (`200 {"ignored": true}`) are skipped and counted separately in the log.
 
-## Usage
+### Auto-deploy on push
 
-### Start the dashboard
+If you deploy from a git checkout, the server can update itself when you push to GitHub. Set `GITHUB_WEBHOOK_SECRET` on the server and add a GitHub webhook for push events to `https://example.com/push` (content type `application/json`, same secret). A valid signed push event makes the server run `git pull origin main` in `DEPLOY_REPO_DIR` (the branch name is fixed, and `git` must be available on the host), then touch `DEPLOY_RELOAD_FILE` (for example a PythonAnywhere WSGI file) so the host reloads the app. Without `GITHUB_WEBHOOK_SECRET`, `/push` returns `404`. If `DEPLOY_REPO_DIR` is missing, a push event returns `500`; `DEPLOY_RELOAD_FILE` is optional.
+
+## Security notes
+
+- `API_TOKEN` is required. Without it every `/api/*` call fails with `503`; the server never runs open. The page routes (`/`, `/login`, static files) are not gated, but they contain no data.
+- Serve the app over HTTPS on any public host. The token is a bearer secret sent on every request and returned by `/api/login`.
+- Never set `FLASK_DEBUG=true` on a reachable host: Flask's interactive debugger allows remote code execution.
+- Set `TRUST_PROXY=true` only when a reverse proxy in front sets `X-Forwarded-For`. Without a proxy, a client could spoof that header and dodge the lockout. Behind a proxy but without `TRUST_PROXY`, every client appears to have the proxy's IP and they all share one lockout bucket.
+- Run a single worker. After 10 failed attempts within 5 minutes, a source IP gets `429` on `/api/*` until the failures age out. That state, and the lock preventing concurrent syncs, is in memory per process, so multiple workers would not share them.
+- Never commit or log `.env`, `API_TOKEN`, `credentials.json`, `token.json` or the database. The Docker build context excludes them.
+
+## Development
 
 ```bash
-source .venv/bin/activate
-python -m backend.server
-```
-
-Opens at http://localhost:5000
-
-### Fetch new transactions
-
-```bash
-python -m backend.process_transactions
-```
-
-### Run tests
-
-```bash
+pip install -r requirements-dev.txt
 pytest tests/ -v
 ```
 
-## Project structure
-
-```
-finance-tracker/
-├── backend/
-│   ├── server.py                 # Flask API server + static file serving
-│   ├── constants.py              # Shared constants (tx types, paths, labels)
-│   ├── process_transactions.py   # Fetch from Gmail and store
-│   ├── banks/
-│   │   ├── santander.py          # Gmail fetcher + email parsers
-│   │   └── santander_last_run.txt # Epoch timestamp of last fetch
-│   └── db/
-│       ├── storage.py            # SQLite schema, insert, query, category functions
-│       └── finance_tracker.db    # SQLite database (DO NOT commit)
-├── frontend/
-│   ├── html/                     # Page templates (index, categorize, transactions, settings)
-│   ├── css/                      # Stylesheets (shared + page-specific)
-│   ├── js/                       # Page scripts (app, categorize, transactions, settings, common)
-│   ├── icons/                    # PWA icons (icon.svg source + generated PNGs)
-│   └── manifest.json             # PWA manifest
-├── tests/                        # pytest suite + .eml fixtures
-├── requirements.txt              # Python dependencies
-├── credentials.json              # Google OAuth credentials (DO NOT commit)
-└── token.json                    # OAuth token (DO NOT commit)
-```
+See [CONTRIBUTING.md](CONTRIBUTING.md) for adding a bank and project conventions.
 
 ## Dashboard pages
 
-- `/` — Overview: a single global month selector drives everything on the page — a KPI row (income, expenses, net, savings rate, deltas vs. last month/3-month average, month-end spend projection, progress vs. a savings goal), a cash-flow chart (grouped income/expense bars + a net line + an optional goal line) next to the cumulative net-balance chart, income/expense breakdown doughnuts (click a slice to drill into `/transactions` filtered to that month + category), per-category budget progress bars, top merchants and recurring-expense lists, and a quarter/YTD summary. The header shows a data-freshness indicator ("Synced 2h ago").
+- `/` — Overview: a single global month selector drives everything on the page — a KPI row (income, expenses, net, savings rate, deltas vs. last month/3-month average, month-end spend projection, progress vs. a savings goal), a cash-flow chart (grouped income/expense bars + a net line + an optional goal line) next to the cumulative net-balance chart, income/expense breakdown doughnuts (click a slice to drill into `/transactions` filtered to that month + category), per-category budget progress bars, top merchants and recurring-expense lists, and a quarter/YTD summary. The header shows a data-freshness indicator ("Synced 2h ago") and a "Sync now" button.
 - `/categorize` — Work through uncategorized transactions one at a time. Each one is pre-filled with a suggested category (based on how the same merchant/sender was categorized before), plus up to 8 one-click category chips (numbered 1–8 for keyboard shortcuts) filtered to that transaction's income/expense kind. An "apply to all N remaining from X" checkbox batch-categorizes every other queued transaction with the same description in one action. The nav link shows a badge with the current uncategorized count.
-- `/transactions` — Side-by-side income/expense tables, each independently sortable (click a column header) and searchable (matches every visible column), with a totals footer, bank/person filters, a removable category filter chip, and CSV export. Click any row to edit it (or delete it) in the shared modal; the month, filters and search terms are kept in the URL so the view survives a reload or a drill-down link from `/`.
-- `/settings` — Manage categories (rename, tag as income/expense, set a monthly budget, merge into another category, or delete), set a monthly savings goal, and manage the ignored-transfer rules (which internal transfers between your own accounts are skipped on import) without touching code.
+- `/transactions` — Side-by-side income/expense tables, each independently sortable and searchable, with a totals footer, bank/person filters, a removable category filter chip, and CSV export. Click any row to edit or delete it in the shared modal; the month, filters and search terms are kept in the URL.
+- `/settings` — Manage categories (rename, tag as income/expense, set a monthly budget, merge into another category, or delete), set a monthly savings goal, and manage the ignored-transfer rules without touching code.
+- `/login` — Sign in with the seeded `ADMIN_USERNAME`/`ADMIN_PASSWORD`.
 
 The app is installable as a PWA (manifest + icons); on screens under 600px a floating "+" button opens the quick-add modal.
 
 ## API
 
-The Flask server exposes a JSON API used by the dashboard frontend. All endpoints are under `/api/` and require `Authorization: Bearer <API_TOKEN>` (see [Hosting & auth](#hosting--auth)). Page and static routes (`/`, `/categorize`, `/transactions`, `/settings`, CSS/JS) are not gated.
+The Flask server exposes a JSON API used by the dashboard. All endpoints are under `/api/` and require `Authorization: Bearer <API_TOKEN>`, except `POST /api/login`, which takes `{username, password}` and returns the token (it still counts toward the failed-attempt lockout).
 
-**Transactions** — `GET /api/transactions` returns all transactions with optional filters (`bank`, `type`, `start_date`, `end_date`, `person`). You can also create (`POST`), update (`PUT /<id>`), and delete (`DELETE /<id>`) transactions manually — useful for entries that didn't come from a bank email. `PUT /<id>` accepts `amount`, `merchant`, `category`, `sender_bank`, `date`, `type`, `bank` and `notes`, and returns `409` on a dedup collision. `POST` returns `200 {"ignored": true}` instead of inserting when the transaction matches an ignored-transfer rule.
+**Transactions** — `GET /api/transactions` returns all transactions with optional filters (`bank`, `type`, `start_date`, `end_date`, `person`). You can also create (`POST`), update (`PUT /<id>`), and delete (`DELETE /<id>`) transactions manually. `PUT /<id>` accepts `amount`, `merchant`, `category`, `sender_bank`, `date`, `type`, `bank` and `notes`, and returns `409` on a dedup collision. `POST` returns `409` on a duplicate and `200 {"ignored": true}` instead of inserting when the transaction matches an ignored-transfer rule.
 
-**Summaries and charts** — several read-only endpoints power the dashboard visualizations:
+**Summaries and charts** — read-only endpoints power the dashboard:
 - `/api/summary` — totals grouped by transaction type
 - `/api/monthly` — monthly totals broken down by type
-- `/api/savings` — per-month savings (income minus purchases and outgoing transfers) for a given year
+- `/api/savings` — per-month savings (income minus purchases and outgoing transfers) for a given `year`
 - `/api/merchants` — top merchants ranked by total spend
 - `/api/breakdown` — income and expenses grouped by category, for a given `month` (`YYYY-MM`) or a whole `year` (`YYYY`)
-- `/api/recurring?month=` — merchants that appear in 3+ consecutive months (of the 6 leading up to `month`) with amounts within ±20% of their median, each with a typical amount, last-seen date and month count
-- `/api/status` — `{last_synced, uncategorized}`: when the DB was last written to by ingestion (excluding manual entries) and how many transactions still need a category
+- `/api/recurring?month=` — merchants that appear in 3+ consecutive months (of the 6 leading up to `month`) with amounts within ±20% of their median
+- `/api/status` — `{last_synced, uncategorized, latest_tx_dates}`: when ingestion last wrote to the DB, how many transactions still need a category, and the newest stored transaction per ingestion source
 
-**Categories** — `GET /api/categories` lists category names; `?detailed=true` returns `[{id, name, kind, budget, count}]`. `POST /api/categories` creates one (`{name, kind?}`). `PUT /api/categories/<id>` updates `name`/`kind`/`budget`; renaming onto an existing name merges the two categories (moves the transactions, deletes the source). `DELETE /api/categories/<id>` removes a category and sets its transactions' category back to `NULL`. `GET /api/uncategorized` returns transactions with no category assigned, each with a `suggested_category` inferred from how the same merchant/sender was categorized elsewhere. `PUT /api/transactions/categorize` batch-assigns categories by transaction ID.
+**Sync** — `POST /api/sync` runs Gmail ingestion on the server and returns `{inserted, ignored, duplicates}`. `409` if a sync is already running; `503` if the Gmail token is missing or expired and cannot be refreshed (re-authenticate locally and copy `token.json` to the server).
+
+**Categories** — `GET /api/categories` lists category names; `?detailed=true` returns `[{id, name, kind, budget, count}]`. `POST /api/categories` creates one (`{name, kind?}`). `PUT /api/categories/<id>` updates `name`/`kind`/`budget`; renaming onto an existing name merges the two categories. `DELETE /api/categories/<id>` removes a category and its transactions become uncategorized. `GET /api/uncategorized` returns transactions with no category, each with a `suggested_category`. `PUT /api/transactions/categorize` batch-assigns categories by transaction ID.
 
 **Settings & ignored transfers** — `GET/PUT /api/settings` reads/writes whitelisted keys (currently `savings_goal`; `PUT` accepts a non-negative number or `null`). `GET /api/ignored-transfers` lists the rules used to skip internal transfers on import; `POST` (`{account_last4, bank}`) adds one and `DELETE /<id>` removes one.
 
@@ -153,37 +192,20 @@ All amounts are in MXN. Dates use ISO 8601 format (`YYYY-MM-DDTHH:MM:SS`).
 
 ## Categorization workflow
 
-Transactions are stored without a category by default. The `/categorize` page provides a one-by-one queue to work through them: it fetches the next uncategorized transaction (pre-filled with a suggested category and quick-pick chips), lets you pick, type or create a category, and advances to the next — optionally applying the same category to every other queued transaction with a matching description in one batch. Categories are stored in uppercase (e.g. `FOOD`, `TRANSPORT`).
+Transactions are stored without a category by default. The `/categorize` page is a one-by-one queue: it fetches the next uncategorized transaction (pre-filled with a suggested category and quick-pick chips), lets you pick, type or create a category, and advances to the next, optionally applying the same category to every other queued transaction with a matching description. Categories are stored in uppercase (e.g. `FOOD`, `TRANSPORT`).
 
-Once categorized, transactions appear grouped by category in the `/` overview's monthly breakdown chart and budget progress bars. You can also re-categorize any transaction from the `/transactions` page, or manage categories in bulk (rename, merge, delete, tag as income/expense, set a budget) on `/settings`.
-
-Categories are free-form — create whatever labels make sense for your spending. They persist in their own `categories` table (`name`, `kind`, `budget`) and are reusable across transactions. `kind` (`income`/`expense`/`NULL`) is inferred automatically for existing categories the first time this column is added, and is set explicitly for anything created afterward, based on the transaction type it was first used with.
+Once categorized, transactions appear grouped by category in the overview's breakdown chart and budget bars. You can re-categorize any transaction from `/transactions`, or manage categories in bulk on `/settings`. Categories are free-form and live in their own `categories` table (`name`, `kind`, `budget`). `kind` (`income`/`expense`/`NULL`) is set based on the transaction type a category is first used with.
 
 ## Tracking by person
 
-Each transaction has an optional `person` field. This is useful for shared-household tracking — tag transactions as belonging to one person or another, then filter by `person` on `GET /api/transactions` to see spending split by individual.
-
-The field is not set by the bank parsers automatically; assign it manually via `PUT /api/transactions/<id>` after import if needed.
+Each transaction has an optional `person` field, useful for shared-household tracking: filter by `person` on `GET /api/transactions` to see spending split by individual. The bank parsers do not set it; assign it via `PUT /api/transactions/<id>` after import.
 
 ## Internal transfer filtering
 
-Transfers to and from personal accounts at other institutions (e.g. a Mercado Pago wallet or an STP account) are automatically ignored during import and never saved to the database. This prevents internal money movements from inflating income or expense totals.
+Transfers to and from your own accounts at other institutions (for example a wallet or a second bank account) can be ignored during import so they do not inflate income or expense totals. The list ships empty. Add rules (`account_last4` plus `bank`, matched together and case-insensitively on the bank name) on `/settings`, or via `GET/POST /api/ignored-transfers` and `DELETE /api/ignored-transfers/<id>`.
 
-The rules live in the `ignored_transfers` table (`account_last4`, `bank`), not in code — manage them from `/settings` (or via `GET/POST /api/ignored-transfers` and `DELETE /api/ignored-transfers/<id>`) without a redeploy. `backend/constants.py`'s `IGNORED_ACCOUNT_TRANSFERS` is only the seed list used to populate that table the first time it's empty. It ships empty; an example of the format:
+Filtering happens in `insert_transactions` (storage layer), not in the bank parsers, so it applies the same way for a local DB and for the hosted API (a matching `POST /api/transactions` returns `200 {"ignored": true}`). `IGNORED_ACCOUNT_TRANSFERS` in `backend/constants.py` is only an optional seed list used to populate the table the first time it is empty, for example `{"account_last4": "1234", "bank": "Example Bank"}`.
 
-```python
-IGNORED_ACCOUNT_TRANSFERS = [
-    {"account_last4": "5555", "bank": "Mercado Pago W"},
-    {"account_last4": "7777", "bank": "STP"},
-]
-```
+## License
 
-Matching is done on both `account_last4` and `bank` together (case-insensitive on the bank name), so two different accounts at the same institution won't conflict. The filtering itself happens in `insert_transactions` (storage layer), not in the bank parsers, so it applies the same way whether transactions are written to a local DB or pushed to a hosted API — a matching `POST /api/transactions` returns `200 {"ignored": true}` instead of inserting.
-
-## Adding a new bank
-
-1. Create `backend/banks/<bank_name>.py`
-2. Implement `fetch_transactions() -> list[dict]` following the same pattern
-3. Wire it into `backend/process_transactions.py`
-
-Each transaction dict must include at minimum: `bank`, `type`, `amount`, `currency`, `date`.
+[MIT](LICENSE)
