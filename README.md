@@ -169,12 +169,12 @@ The field is not set by the bank parsers automatically; assign it manually via `
 
 Transfers to and from personal accounts at other institutions (e.g. a Mercado Pago wallet or an STP account) are automatically ignored during import and never saved to the database. This prevents internal money movements from inflating income or expense totals.
 
-The rules live in the `ignored_transfers` table (`account_last4`, `bank`), not in code — manage them from `/settings` (or via `GET/POST /api/ignored-transfers` and `DELETE /api/ignored-transfers/<id>`) without a redeploy. `backend/constants.py`'s `IGNORED_ACCOUNT_TRANSFERS` is only the seed list used to populate that table the first time it's empty:
+The rules live in the `ignored_transfers` table (`account_last4`, `bank`), not in code — manage them from `/settings` (or via `GET/POST /api/ignored-transfers` and `DELETE /api/ignored-transfers/<id>`) without a redeploy. `backend/constants.py`'s `IGNORED_ACCOUNT_TRANSFERS` is only the seed list used to populate that table the first time it's empty. It ships empty; an example of the format:
 
 ```python
 IGNORED_ACCOUNT_TRANSFERS = [
-    {"account_last4": "6184", "bank": "Mercado Pago W"},
-    {"account_last4": "8275", "bank": "STP"},
+    {"account_last4": "5555", "bank": "Mercado Pago W"},
+    {"account_last4": "7777", "bank": "STP"},
 ]
 ```
 

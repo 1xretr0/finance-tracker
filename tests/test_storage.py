@@ -77,9 +77,9 @@ class TestInsert:
         assert count == 0
 
     def test_detailed_counts_inserted_ignored_and_duplicates(self):
-        create_ignored_transfer("6184", "Mercado Pago W")
+        create_ignored_transfer("5555", "Mercado Pago W")
         ignored_tx = make_transfer()
-        ignored_tx["source_account"] = "6184"
+        ignored_tx["source_account"] = "5555"
         ignored_tx["sender_bank"] = "Mercado Pago W"
         dup_tx = make_purchase()
 
@@ -509,9 +509,19 @@ class TestMigrations:
         assert cats["SALARY"]["kind"] == "income"
         assert cats["FOOD"]["kind"] == "expense"
 
-    def test_ignored_transfers_seeded_from_constants(self):
+    def test_default_ignored_transfer_seed_is_empty(self):
+        from backend import constants
+        assert constants.IGNORED_ACCOUNT_TRANSFERS == []
+
+    def test_ignored_transfers_seeded_from_constants(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(
+            storage, "IGNORED_ACCOUNT_TRANSFERS",
+            [{"account_last4": "5555", "bank": "Example Bank"}],
+        )
+        monkeypatch.setattr(storage, "DB_PATH", str(tmp_path / "fresh.db"))
+        init_db()
         rules = get_ignored_transfers()
-        assert any(r["account_last4"] == "6184" and r["bank"] == "Mercado Pago W" for r in rules)
+        assert any(r["account_last4"] == "5555" and r["bank"] == "Example Bank" for r in rules)
 
     class _FakeMissingColumnConn:
         """Wraps a real connection, but reports a column as missing from
@@ -550,16 +560,15 @@ class TestMigrations:
         # drop it, then insert a duplicate the index would otherwise block.
         with _connection() as conn:
             conn.execute("DROP INDEX IF EXISTS idx_ignored_transfers_unique")
-            conn.execute(
+            conn.executemany(
                 "INSERT INTO ignored_transfers (account_last4, bank) VALUES (?, ?)",
-                ("6184", "mercado pago w"),  # duplicate of a seeded rule, different case
+                [("5555", "Example Bank"), ("5555", "example bank")],  # same rule, different case
             )
-        assert len(get_ignored_transfers()) == len(storage.IGNORED_ACCOUNT_TRANSFERS) + 1
+        assert len(get_ignored_transfers()) == 2
 
         init_db()
 
-        rules = get_ignored_transfers()
-        assert len(rules) == len(storage.IGNORED_ACCOUNT_TRANSFERS)
+        assert len(get_ignored_transfers()) == 1
         index_row = get_connection().execute(
             "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_ignored_transfers_unique'"
         ).fetchone()
@@ -794,9 +803,9 @@ class TestIgnoredTransfers:
         assert delete_ignored_transfer(9999) is False
 
     def test_insert_skips_incoming_ignored_transfer(self):
-        create_ignored_transfer("6184", "Mercado Pago W")
+        create_ignored_transfer("5555", "Mercado Pago W")
         tx = make_transfer()
-        tx["source_account"] = "6184"
+        tx["source_account"] = "5555"
         tx["sender_bank"] = "Mercado Pago W"
         count = insert_transactions([tx])
         assert count == 0
@@ -817,14 +826,14 @@ class TestIgnoredTransfers:
         assert count == 0
 
     def test_insert_keeps_non_matching_transfer(self):
-        create_ignored_transfer("6184", "Mercado Pago W")
+        create_ignored_transfer("5555", "Mercado Pago W")
         count = insert_transactions([make_transfer()])
         assert count == 1
 
     def test_is_ignored_transfer_case_insensitive_bank(self):
-        create_ignored_transfer("6184", "Mercado Pago W")
+        create_ignored_transfer("5555", "Mercado Pago W")
         tx = make_transfer()
-        tx["source_account"] = "6184"
+        tx["source_account"] = "5555"
         tx["sender_bank"] = "mercado pago w"
         assert is_ignored_transfer(tx) is True
 

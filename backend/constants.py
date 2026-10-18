@@ -159,11 +159,9 @@ UPDATABLE_FIELDS = {"amount", "merchant", "category", "sender_bank", "date", "ty
 # ---------------------------------------------------------------------------
 SETTINGS_KEYS = {"savings_goal"}
 
-IGNORED_ACCOUNT_TRANSFERS = [
-    {"account_last4": "6184", "bank": "Mercado Pago W"},
-    {"account_last4": "8275", "bank": "STP"},
-    {"account_last4": "6031", "bank": "GBM"},
-]
+# Seed data for the ignored_transfers table (used only when the table is empty).
+# Example: {"account_last4": "5555", "bank": "Example Bank"}
+IGNORED_ACCOUNT_TRANSFERS = []
 
 # ---------------------------------------------------------------------------
 # Santander email parsing patterns
