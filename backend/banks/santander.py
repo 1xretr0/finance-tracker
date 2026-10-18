@@ -27,6 +27,8 @@ from backend.constants import (
 	GMAIL_LABEL_SANTANDER,
 	TOKEN_FILE,
 	CREDENTIALS_FILE,
+	OAUTH_PORT,
+	OAUTH_BIND_ADDR,
 	DATE_FORMAT_TX,
 	MONTHS_ES,
 	PATTERN_INCOMING_TRANSFER_UPPER,
@@ -133,7 +135,7 @@ def _authenticate(interactive: bool = True):
 			flow = InstalledAppFlow.from_client_secrets_file(
 				CREDENTIALS_FILE, GMAIL_SCOPES
 			)
-			creds = flow.run_local_server(port=0)
+			creds = flow.run_local_server(port=OAUTH_PORT, bind_addr=OAUTH_BIND_ADDR)
 		else:
 			raise AuthenticationRequiredError(
 				"No valid Gmail token and interactive auth is disabled; "

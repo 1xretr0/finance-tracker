@@ -34,6 +34,18 @@ class TestInteractiveAuthentication:
         fake_flow.run_local_server.assert_called_once()
         assert creds is fake_creds
 
+    def test_interactive_flow_uses_fixed_port_and_bind_addr(self, monkeypatch):
+        monkeypatch.setattr(santander, "OAUTH_BIND_ADDR", "0.0.0.0")
+        fake_creds = MagicMock(valid=True)
+        fake_creds.to_json.return_value = "{}"
+        fake_flow = MagicMock()
+        fake_flow.run_local_server.return_value = fake_creds
+        with patch.object(
+            santander.InstalledAppFlow, "from_client_secrets_file", return_value=fake_flow
+        ):
+            _authenticate(interactive=True)
+        fake_flow.run_local_server.assert_called_once_with(port=8765, bind_addr="0.0.0.0")
+
     def test_refreshes_expired_token_without_needing_interactive(self, tmp_path):
         token_path = tmp_path / "token.json"
         token_path.write_text("{}")
