@@ -71,22 +71,27 @@ GMAIL_LABEL_SANTANDER = "santander_notifications"
 # ---------------------------------------------------------------------------
 # Precedence: explicit DB_PATH / TOKEN_PATH / CREDENTIALS_PATH > DATA_DIR > project defaults.
 # DATA_DIR: one directory holding the DB, token.json and credentials.json.
+# A relative path is resolved against the project root (not the working directory); "~" is expanded.
 DATA_DIR = os.environ.get("DATA_DIR")
+if DATA_DIR:
+    DATA_DIR = os.path.join(_PROJECT_ROOT, os.path.expanduser(DATA_DIR))
+else:
+    DATA_DIR = None
 # TOKEN_PATH: overrides where the Gmail OAuth token is read/written. Only
 # token.json (not credentials.json or the ingestion script) needs to be
 # present on a hosted deployment for the server's "Sync now" button to work.
-TOKEN_FILE = os.environ.get("TOKEN_PATH", os.path.join(DATA_DIR or _PROJECT_ROOT, "token.json"))
-CREDENTIALS_FILE = os.environ.get("CREDENTIALS_PATH", os.path.join(DATA_DIR or _PROJECT_ROOT, "credentials.json"))
+TOKEN_FILE = os.environ.get("TOKEN_PATH") or os.path.join(DATA_DIR or _PROJECT_ROOT, "token.json")
+CREDENTIALS_FILE = os.environ.get("CREDENTIALS_PATH") or os.path.join(DATA_DIR or _PROJECT_ROOT, "credentials.json")
 
 DB_FILENAME = "finance_tracker.db"
 _DEFAULT_DB_PATH = os.path.join(DATA_DIR or os.path.join(os.path.dirname(__file__), "db"), DB_FILENAME)
-DB_PATH = os.environ.get("DB_PATH", _DEFAULT_DB_PATH)
+DB_PATH = os.environ.get("DB_PATH") or _DEFAULT_DB_PATH
 
 # ---------------------------------------------------------------------------
 # Hosting / remote API configuration
 # ---------------------------------------------------------------------------
-# API_TOKEN: shared secret required on every /api/* request once the server is
-# publicly hosted. Unset locally by default (auth is disabled for local dev).
+# API_TOKEN: shared secret required on every /api/* request. If unset, the API
+# rejects all /api/* requests with 503 (fail closed).
 API_TOKEN = os.environ.get("API_TOKEN")
 
 # REMOTE_API_URL: when set on the machine running process_transactions, newly
@@ -132,7 +137,7 @@ MONTHS_ES = {
 # ---------------------------------------------------------------------------
 # Server configuration
 # ---------------------------------------------------------------------------
-SERVER_PORT = int(os.environ.get("PORT", 5000))
+SERVER_PORT = int(os.environ.get("PORT") or 5000)
 
 # Optional admin login credentials.
 ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME")

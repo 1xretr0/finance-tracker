@@ -89,3 +89,48 @@ def test_real_env_beats_env_file(cfg, tmp_path):
     mp.setenv("ENV_FILE", str(env_file))
     mp.setenv("ADMIN_USERNAME", "fromenv")
     assert load().ADMIN_USERNAME == "fromenv"
+
+
+def test_empty_db_path_falls_back_to_default(cfg):
+    load, mp = cfg
+    mp.setenv("DB_PATH", "")
+    assert load().DB_PATH.endswith(os.path.join("backend", "db", "finance_tracker.db"))
+
+
+def test_empty_db_path_falls_back_to_data_dir(cfg, tmp_path):
+    load, mp = cfg
+    mp.setenv("DATA_DIR", str(tmp_path))
+    mp.setenv("DB_PATH", "")
+    assert load().DB_PATH == os.path.join(str(tmp_path), "finance_tracker.db")
+
+
+def test_empty_token_and_credentials_paths_fall_back(cfg):
+    load, mp = cfg
+    mp.setenv("TOKEN_PATH", "")
+    mp.setenv("CREDENTIALS_PATH", "")
+    c = load()
+    assert c.TOKEN_FILE.endswith("token.json") and os.path.basename(c.TOKEN_FILE)
+    assert c.CREDENTIALS_FILE.endswith("credentials.json") and os.path.basename(c.CREDENTIALS_FILE)
+
+
+def test_empty_port_defaults_to_5000(cfg):
+    load, mp = cfg
+    mp.setenv("PORT", "")
+    assert load().SERVER_PORT == 5000
+
+
+def test_relative_data_dir_resolves_against_project_root(cfg):
+    load, mp = cfg
+    mp.setenv("DATA_DIR", "data")
+    c = load()
+    root = os.path.dirname(os.path.dirname(os.path.abspath(c.__file__)))
+    assert c.DB_PATH == os.path.join(root, "data", "finance_tracker.db")
+    assert c.TOKEN_FILE == os.path.join(root, "data", "token.json")
+
+
+def test_data_dir_expands_user_home(cfg):
+    load, mp = cfg
+    mp.setenv("DATA_DIR", "~/x")
+    c = load()
+    assert c.DATA_DIR == os.path.join(os.path.expanduser("~"), "x")
+    assert c.DB_PATH == os.path.join(os.path.expanduser("~"), "x", "finance_tracker.db")
