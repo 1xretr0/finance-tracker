@@ -513,7 +513,8 @@ def verify_signature(payload, signature_header, secret):
         return False
 
     mac = hmac.new(secret.encode('utf-8'), msg=payload, digestmod=hashlib.sha256)
-    return hmac.compare_digest(mac.hexdigest(), signature)
+    # Compare bytes: str compare_digest raises TypeError on non-ASCII (headers are latin-1)
+    return hmac.compare_digest(mac.hexdigest().encode(), signature.encode('utf-8', 'surrogateescape'))
 
 def trigger_reload():
     """Waits for the HTTP response to be sent to GitHub, then reloads the app."""

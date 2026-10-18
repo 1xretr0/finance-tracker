@@ -1050,7 +1050,7 @@ class TestPushWebhook:
     def test_push_rejects_wrong_signature_with_403(self):
         assert self._post(self._sign("other")).status_code == 403
 
-    @pytest.mark.parametrize("header", ["garbage", "sha256"])
+    @pytest.mark.parametrize("header", ["garbage", "sha256", "sha256=\xe9"])
     def test_push_rejects_malformed_signature_header_with_403(self, header):
         assert self._post(header).status_code == 403
 
