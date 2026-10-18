@@ -17,7 +17,7 @@ cp .env.example .env
 Edit `.env` and fill in:
 
 - `API_TOKEN`: a shared secret that every `/api/*` request must carry. Generate one with `python -c "import secrets; print(secrets.token_urlsafe(32))"`. Without it the API answers `503` to everything, even on localhost.
-- `ADMIN_USERNAME` and `ADMIN_PASSWORD`: the dashboard login. They create one user the first time the database is initialised and only if the users table is empty. Leave either blank and no user is created, so you cannot sign in.
+- `ADMIN_USERNAME` and `ADMIN_PASSWORD`: the dashboard login. They only seed the first user, when the database is initialised and the `users` table is empty; the password is stored hashed. Changing them later has no effect (see [resetting the login](#resetting-the-dashboard-login)). Leave either blank and no user is created, so you cannot sign in.
 
 Then fetch your transactions once and start the dashboard:
 
@@ -26,7 +26,7 @@ python -m backend.process_transactions   # first run opens a browser for Gmail c
 python -m backend.server                 # http://localhost:5000
 ```
 
-Open http://localhost:5000, sign in with `ADMIN_USERNAME`/`ADMIN_PASSWORD`, and use the "Sync now" button (or re-run `python -m backend.process_transactions`) whenever you want new transactions.
+Open http://localhost:5000, sign in with the `ADMIN_USERNAME`/`ADMIN_PASSWORD` you set, and use the "Sync now" button (or re-run `python -m backend.process_transactions`) whenever you want new transactions.
 
 The database is `backend/db/finance_tracker.db` unless you set `DATA_DIR` or `DB_PATH`.
 
@@ -37,8 +37,8 @@ cp .env.example .env          # compose reads it via env_file; it fails if missi
 # edit .env: set API_TOKEN, ADMIN_USERNAME, ADMIN_PASSWORD (see above)
 
 mkdir -p data
-sudo chown 1000:1000 data     # Linux only, see note below
 cp /path/to/credentials.json data/credentials.json
+sudo chown -R 1000:1000 data  # Linux only, see note below; do this after the cp
 
 docker compose up -d          # builds the image on first run; dashboard at http://localhost:5000
 ```
@@ -53,7 +53,7 @@ It prints a Google consent URL; open it in a browser on the same machine (the ca
 
 Notes:
 
-- The container runs as uid 1000. On Linux, Docker creates a missing `./data` as root, so create it first and `chown 1000:1000` it as shown, or the app cannot write the database. Docker Desktop on macOS/Windows is usually not affected.
+- The container runs as uid 1000. On Linux, Docker creates a missing `./data` as root, so create it first and `chown` it as shown (after copying your own files in, since you may not be able to write there afterwards without `sudo`), or the app cannot write the database. Docker Desktop on macOS/Windows is usually not affected.
 - The compose file maps `5000:5000` and the image listens on 5000. Do not set `PORT` in `.env` when using it.
 - Compose does not publish 8765 by default; the `-p 8765:8765` above is only needed for the one-off authorisation.
 - If Docker runs on a remote machine, `localhost:8765` in your own browser will not reach it. Either tunnel the port (`ssh -L 8765:localhost:8765 user@host`) or authorise on a machine with a browser and copy `token.json` into the data directory.
@@ -118,7 +118,7 @@ Configuration is read from environment variables, optionally loaded from a `.env
 | Variable | Default | Purpose |
 |---|---|---|
 | `API_TOKEN` | none (required) | Shared secret sent as `Authorization: Bearer <token>` on every `/api/*` request. If unset the API returns `503`. |
-| `ADMIN_USERNAME`, `ADMIN_PASSWORD` | none | Seed one dashboard user when the users table is empty. Blank means no user. `/api/login` checks these credentials and returns `API_TOKEN` to the browser. |
+| `ADMIN_USERNAME`, `ADMIN_PASSWORD` | none | Seed one dashboard user, only when the `users` table is empty. Blank means no user. Changing them later has no effect: `/api/login` checks the stored `users` row (hashed password) and returns `API_TOKEN` to the browser. See [resetting the login](#resetting-the-dashboard-login). |
 | `DATA_DIR` | unset | Directory holding `finance_tracker.db`, `token.json` and `credentials.json`. Unset keeps the in-repo defaults (`backend/db/` for the database, project root for the others). The Docker image sets `/data`. |
 | `DB_PATH`, `TOKEN_PATH`, `CREDENTIALS_PATH` | inside `DATA_DIR` | Override the location of an individual file. These take precedence over `DATA_DIR`. |
 | `PORT` | `5000` | Port for `python -m backend.server` and for the Docker image's gunicorn. |
@@ -128,6 +128,17 @@ Configuration is read from environment variables, optionally loaded from a `.env
 | `REMOTE_API_URL` | unset | See [split ingest](#split-ingest-remote-push). |
 | `GITHUB_WEBHOOK_SECRET`, `DEPLOY_REPO_DIR`, `DEPLOY_RELOAD_FILE` | unset | See [auto-deploy on push](#auto-deploy-on-push). |
 | `ENV_FILE` | `<project>/.env` | Path of the `.env` file to load. Must be a real environment variable (it cannot be set inside `.env`). |
+
+### Resetting the dashboard login
+
+`/api/login` checks the `users` table in the database, not `.env`. Editing `ADMIN_USERNAME`/`ADMIN_PASSWORD` after the first user exists does nothing, and there is no in-app way to change a password. To change it, delete the user, update the two values in `.env`, and restart so the next database initialisation seeds the new user:
+
+```bash
+sqlite3 backend/db/finance_tracker.db "DELETE FROM users"   # or <DATA_DIR>/finance_tracker.db, e.g. data/finance_tracker.db for Docker
+# edit .env, then restart the server (Docker: docker compose restart)
+```
+
+This runs the `sqlite3` command-line tool on the host against the database file (the Docker image does not include it). If `data/` is owned by uid 1000 and you are a different user, prefix the command with `sudo`.
 
 ## Advanced
 
@@ -163,7 +174,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for adding a bank and project conventions
 - `/categorize` — Work through uncategorized transactions one at a time. Each one is pre-filled with a suggested category (based on how the same merchant/sender was categorized before), plus up to 8 one-click category chips (numbered 1–8 for keyboard shortcuts) filtered to that transaction's income/expense kind. An "apply to all N remaining from X" checkbox batch-categorizes every other queued transaction with the same description in one action. The nav link shows a badge with the current uncategorized count.
 - `/transactions` — Side-by-side income/expense tables, each independently sortable and searchable, with a totals footer, bank/person filters, a removable category filter chip, and CSV export. Click any row to edit or delete it in the shared modal; the month, filters and search terms are kept in the URL.
 - `/settings` — Manage categories (rename, tag as income/expense, set a monthly budget, merge into another category, or delete), set a monthly savings goal, and manage the ignored-transfer rules without touching code.
-- `/login` — Sign in with the seeded `ADMIN_USERNAME`/`ADMIN_PASSWORD`.
+- `/login` — Sign in as the user seeded from `ADMIN_USERNAME`/`ADMIN_PASSWORD` on first initialisation.
 
 The app is installable as a PWA (manifest + icons); on screens under 600px a floating "+" button opens the quick-add modal.
 
