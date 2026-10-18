@@ -898,3 +898,62 @@ class TestGetLatestTxDate:
     def test_latest_tx_dates_source_is_none_when_no_data(self):
         status = get_status()
         assert status["latest_tx_dates"]["santander"] is None
+
+
+# ---------------------------------------------------------------------------
+# Test suite: first-user seed and data-dir creation
+# ---------------------------------------------------------------------------
+class TestInitDbSeedAndDataDir:
+    @pytest.fixture(autouse=True)
+    def fresh_db(self, tmp_path, monkeypatch):
+        # The module-level autouse fixture already ran init_db() on another DB.
+        monkeypatch.setattr(storage, "DB_PATH", str(tmp_path / "fresh.db"))
+
+    @staticmethod
+    def _users():
+        with _connection() as conn:
+            return conn.execute("SELECT * FROM users").fetchall()
+
+    def test_init_db_seeds_admin_user_when_users_empty(self, monkeypatch):
+        from werkzeug.security import check_password_hash
+        monkeypatch.setattr(storage, "ADMIN_USERNAME", "admin")
+        monkeypatch.setattr(storage, "ADMIN_PASSWORD", "pw-123")
+        init_db()
+        rows = self._users()
+        assert len(rows) == 1
+        assert rows[0]["username"] == "admin"
+        assert rows[0]["password_hash"] != "pw-123"
+        assert check_password_hash(rows[0]["password_hash"], "pw-123")
+
+    def test_init_db_leaves_existing_users_alone(self, monkeypatch):
+        init_db()
+        with _connection() as conn:
+            conn.execute(
+                "INSERT INTO users (username, password_hash, created_at) VALUES (?, ?, ?)",
+                ("original", "x", "2026-01-01T00:00:00"),
+            )
+        monkeypatch.setattr(storage, "ADMIN_USERNAME", "admin")
+        monkeypatch.setattr(storage, "ADMIN_PASSWORD", "pw-123")
+        init_db()
+        rows = self._users()
+        assert len(rows) == 1
+        assert rows[0]["username"] == "original"
+
+    def test_init_db_without_admin_env_creates_no_user(self, monkeypatch):
+        monkeypatch.setattr(storage, "ADMIN_USERNAME", None)
+        monkeypatch.setattr(storage, "ADMIN_PASSWORD", None)
+        init_db()
+        assert self._users() == []
+
+    @pytest.mark.parametrize("username,password", [("", "pw"), ("admin", ""), ("", "")])
+    def test_init_db_ignores_blank_admin_credentials(self, monkeypatch, username, password):
+        monkeypatch.setattr(storage, "ADMIN_USERNAME", username)
+        monkeypatch.setattr(storage, "ADMIN_PASSWORD", password)
+        init_db()
+        assert self._users() == []
+
+    def test_init_db_creates_missing_data_dir(self, tmp_path, monkeypatch):
+        db_path = tmp_path / "nested" / "dir" / "test.db"
+        monkeypatch.setattr(storage, "DB_PATH", str(db_path))
+        init_db()
+        assert db_path.exists()

@@ -178,6 +178,16 @@ class TestLoginEndpoint:
             assert data["token"] == TEST_API_TOKEN
             assert data["username"] == "sebas"
 
+    def test_login_with_env_seeded_admin(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(storage, "DB_PATH", str(tmp_path / "seeded.db"))
+        monkeypatch.setattr(storage, "ADMIN_USERNAME", "admin")
+        monkeypatch.setattr(storage, "ADMIN_PASSWORD", "pw-123")
+        init_db()
+        with app.test_client() as unauth_client:
+            res = unauth_client.post("/api/login", json={"username": "admin", "password": "pw-123"})
+            assert res.status_code == 200
+            assert res.get_json()["username"] == "admin"
+
     def test_does_not_require_bearer_token(self):
         # /api/login is how a token is obtained in the first place, so it
         # must be reachable without one, despite being under /api/.
