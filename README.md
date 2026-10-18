@@ -49,7 +49,7 @@ Then authorise Gmail once. This runs the ingestion command inside the image with
 docker compose run --rm -p 8765:8765 app python -m backend.process_transactions
 ```
 
-It prints a Google consent URL; open it in a browser on the same machine (the callback goes to `http://localhost:8765`). The resulting `token.json` is saved in `./data` and the first sync runs immediately. After that, the dashboard's "Sync now" button works too.
+The container has no browser, so the command prints "Please visit this URL to authorize this application: …" and waits. Open that URL in a browser on your own machine; after you approve, Google redirects to `http://localhost:8765/…`, which the published port delivers to the container. The resulting `token.json` is saved in `./data` and the first sync runs immediately. After that, the dashboard's "Sync now" button works too.
 
 Notes:
 
