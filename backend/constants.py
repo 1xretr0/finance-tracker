@@ -108,8 +108,6 @@ AUTH_LOCKOUT_WINDOW_SECONDS = 300
 
 GITHUB_WEBHOOK_SECRET = os.environ.get("GITHUB_WEBHOOK_SECRET")
 
-WSGI_PATH = "/var/www/retr0py_pythonanywhere_com_wsgi.py"
-
 # ---------------------------------------------------------------------------
 # Date & time formats
 # ---------------------------------------------------------------------------

@@ -1,6 +1,8 @@
 # ---------------------------------------------------------------------------
 # Tests for Flask API server endpoints
 # ---------------------------------------------------------------------------
+import hashlib
+import hmac
 import importlib
 import threading
 import time
@@ -981,3 +983,89 @@ class TestLazyDbInit:
 
         assert len(calls) == 2
         assert server._db_initialized is True
+
+
+# ---------------------------------------------------------------------------
+# Test suite: proxy trust
+# ---------------------------------------------------------------------------
+@pytest.fixture()
+def restore_wsgi_app():
+    original = app.wsgi_app
+    yield
+    app.wsgi_app = original
+
+
+class TestProxyTrust:
+    def _get(self, forwarded_for, token):
+        with app.test_client() as c:
+            c.environ_base["HTTP_AUTHORIZATION"] = f"Bearer {token}"
+            return c.get("/api/transactions", headers={"X-Forwarded-For": forwarded_for}).status_code
+
+    def test_trust_proxy_off_ignores_forwarded_for(self, monkeypatch, restore_wsgi_app):
+        monkeypatch.setattr(server, "AUTH_MAX_FAILED_ATTEMPTS", 3)
+        server.apply_proxy_fix(app, False)
+        for i in range(3):
+            assert self._get(f"9.9.9.{i}", "wrong") == 401
+        # A spoofed address does not dodge the lockout keyed on REMOTE_ADDR.
+        assert self._get("8.8.8.8", TEST_API_TOKEN) == 429
+
+    def test_trust_proxy_on_keys_lockout_on_forwarded_for(self, monkeypatch, restore_wsgi_app):
+        monkeypatch.setattr(server, "AUTH_MAX_FAILED_ATTEMPTS", 3)
+        server.apply_proxy_fix(app, True)
+        for _ in range(3):
+            assert self._get("1.1.1.1", "wrong") == 401
+        assert self._get("1.1.1.1", TEST_API_TOKEN) == 429
+        assert self._get("2.2.2.2", TEST_API_TOKEN) == 200
+
+
+# ---------------------------------------------------------------------------
+# Test suite: /push deploy webhook
+# ---------------------------------------------------------------------------
+class TestPushWebhook:
+    SECRET = "s3cret"
+    BODY = b'{"ref": "refs/heads/main"}'
+
+    @pytest.fixture(autouse=True)
+    def configured(self, monkeypatch):
+        monkeypatch.setattr(server, "GITHUB_WEBHOOK_SECRET", self.SECRET)
+        monkeypatch.setattr(server, "DEPLOY_REPO_DIR", None, raising=False)
+
+    def _sign(self, secret=None):
+        mac = hmac.new((secret or self.SECRET).encode(), self.BODY, hashlib.sha256)
+        return f"sha256={mac.hexdigest()}"
+
+    def _post(self, signature, event=None):
+        headers = {"X-Hub-Signature-256": signature}
+        if event:
+            headers["X-GitHub-Event"] = event
+        with app.test_client() as c:  # no bearer token: /push is outside /api
+            return c.post("/push", data=self.BODY, headers=headers)
+
+    def test_push_is_404_when_secret_unset(self, monkeypatch):
+        monkeypatch.setattr(server, "GITHUB_WEBHOOK_SECRET", None)
+        res = self._post(self._sign())
+        assert res.status_code == 404
+        assert "error" in res.get_json()
+
+    def test_push_rejects_wrong_signature_with_403(self):
+        assert self._post(self._sign("other")).status_code == 403
+
+    @pytest.mark.parametrize("header", ["garbage", "sha256"])
+    def test_push_rejects_malformed_signature_header_with_403(self, header):
+        assert self._post(header).status_code == 403
+
+    def test_push_ping_with_valid_signature_returns_200(self):
+        assert self._post(self._sign(), event="ping").status_code == 200
+
+    def test_push_event_without_deploy_repo_dir_returns_500(self):
+        res = self._post(self._sign(), event="push")
+        assert res.status_code == 500
+        assert "DEPLOY_REPO_DIR" in res.get_json()["message"]
+
+    def test_push_event_pulls_in_configured_dir(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(server, "DEPLOY_REPO_DIR", str(tmp_path), raising=False)
+        with patch.object(server.subprocess, "check_output", return_value="Already up to date.") as co, \
+                patch.object(server.threading, "Thread"):
+            res = self._post(self._sign(), event="push")
+        assert res.status_code == 200
+        assert co.call_args.kwargs["cwd"] == str(tmp_path)
