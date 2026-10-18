@@ -1068,4 +1068,5 @@ class TestPushWebhook:
                 patch.object(server.threading, "Thread"):
             res = self._post(self._sign(), event="push")
         assert res.status_code == 200
+        assert co.call_args.args[0] == ["git", "pull", "origin", "main"]
         assert co.call_args.kwargs["cwd"] == str(tmp_path)

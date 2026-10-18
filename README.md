@@ -93,8 +93,10 @@ You can run the server on a VPS or a Python web host so the dashboard is reachab
 4. Run the app with gunicorn using **exactly one worker**; the failed-login lockout and the sync lock live in process memory:
 
    ```bash
-   gunicorn backend.server:app --bind 0.0.0.0:5000 --workers 1 --threads 4 --timeout 300
+   gunicorn backend.server:app --bind 127.0.0.1:5000 --workers 1 --threads 4 --timeout 300
    ```
+
+   Use `0.0.0.0` instead of `127.0.0.1` only if your reverse proxy runs on another machine; otherwise plain-HTTP bearer-token traffic would be exposed on port 5000 next to your HTTPS proxy.
 
    The long timeout is because `POST /api/sync` runs the whole Gmail ingestion inside one request. Put a reverse proxy with HTTPS in front (see [Security notes](#security-notes)).
 
@@ -109,7 +111,7 @@ sys.path.insert(0, "/path/to/your/finance-tracker")   # the project checkout
 from backend.server import app as application
 ```
 
-Set the environment variables in the project's `.env` (or in the web tab), including `DATA_DIR` pointing at a directory that persists. To have the optional [auto-deploy webhook](#auto-deploy-on-push) reload the app, set `DEPLOY_REPO_DIR` to the checkout and `DEPLOY_RELOAD_FILE` to the path of that WSGI file (the app touches it, which makes PythonAnywhere reload). The database schema is created on the first request, so no extra step is needed. PythonAnywhere terminates HTTPS for you. Set `TRUST_PROXY=true` there only if its proxy forwards `X-Forwarded-For` (check that the client IP your app sees is not the same for everyone); otherwise leave it off.
+Set the environment variables in the project's `.env`, or with `os.environ[...]` lines in the WSGI file before the app import (PythonAnywhere's web tab has no environment-variable setting), including `DATA_DIR` pointing at a directory that persists. To have the optional [auto-deploy webhook](#auto-deploy-on-push) reload the app, set `DEPLOY_REPO_DIR` to the checkout and `DEPLOY_RELOAD_FILE` to the path of that WSGI file (the app touches it, which makes PythonAnywhere reload). The database schema is created on the first request, so no extra step is needed. PythonAnywhere terminates HTTPS for you. Set `TRUST_PROXY=true` there only if its proxy forwards `X-Forwarded-For` (check that the client IP your app sees is not the same for everyone); otherwise leave it off.
 
 ## Configuration
 
@@ -119,7 +121,7 @@ Configuration is read from environment variables, optionally loaded from a `.env
 |---|---|---|
 | `API_TOKEN` | none (required) | Shared secret sent as `Authorization: Bearer <token>` on every `/api/*` request. If unset the API returns `503`. |
 | `ADMIN_USERNAME`, `ADMIN_PASSWORD` | none | Seed one dashboard user, only when the `users` table is empty. Blank means no user. Changing them later has no effect: `/api/login` checks the stored `users` row (hashed password) and returns `API_TOKEN` to the browser. See [resetting the login](#resetting-the-dashboard-login). |
-| `DATA_DIR` | unset | Directory holding `finance_tracker.db`, `token.json` and `credentials.json`. Unset keeps the in-repo defaults (`backend/db/` for the database, project root for the others). The Docker image sets `/data`. |
+| `DATA_DIR` | unset | Directory holding `finance_tracker.db`, `token.json` and `credentials.json`. Unset keeps the in-repo defaults (`backend/db/` for the database, project root for the others). A relative path is resolved against the project root and `~` is expanded. The Docker image sets `/data`. |
 | `DB_PATH`, `TOKEN_PATH`, `CREDENTIALS_PATH` | inside `DATA_DIR` | Override the location of an individual file. These take precedence over `DATA_DIR`. |
 | `PORT` | `5000` | Port for `python -m backend.server` and for the Docker image's gunicorn. |
 | `TRUST_PROXY` | `false` | Trust one hop of `X-Forwarded-For` so the lockout sees real client IPs. Only behind a reverse proxy. |
@@ -159,7 +161,7 @@ Instead of running everything on one machine, you can host only the server and d
 
 ### Auto-deploy on push
 
-If you deploy from a git checkout, the server can update itself when you push to GitHub. Set `GITHUB_WEBHOOK_SECRET` on the server and add a GitHub webhook for push events to `https://example.com/push` (content type `application/json`, same secret). A valid signed push event makes the server run `git pull origin main` in `DEPLOY_REPO_DIR` (the branch name is fixed, and `git` must be available on the host), then touch `DEPLOY_RELOAD_FILE` (for example a PythonAnywhere WSGI file) so the host reloads the app. Without `GITHUB_WEBHOOK_SECRET`, `/push` returns `404`. If `DEPLOY_REPO_DIR` is missing, a push event returns `500`; `DEPLOY_RELOAD_FILE` is optional.
+If you deploy from a git checkout, the server can update itself when you push to GitHub. Set `GITHUB_WEBHOOK_SECRET` on the server and add a GitHub webhook for push events to `https://example.com/push` (content type `application/json`, same secret). A valid signed push event makes the server run `git pull origin main` in `DEPLOY_REPO_DIR` (the branch name is fixed, and `git` must be available on the host), then touch `DEPLOY_RELOAD_FILE` (for example a PythonAnywhere WSGI file) so the host reloads the app. The webhook only pulls and reloads; it does NOT install dependencies, so after a change to `requirements.txt` run `pip install -r requirements.txt` on the host yourself. Without `GITHUB_WEBHOOK_SECRET`, `/push` returns `404`. If `DEPLOY_REPO_DIR` is missing, a push event returns `500`; `DEPLOY_RELOAD_FILE` is optional.
 
 ## Security notes
 

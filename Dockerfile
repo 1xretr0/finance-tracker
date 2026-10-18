@@ -24,5 +24,5 @@ EXPOSE 5000
 
 # Exactly one worker: the login lockout and sync lock are in-process.
 # Long timeout: POST /api/sync runs Gmail ingestion inside a single request.
-# Shell form so ${PORT} expands.
-CMD gunicorn backend.server:app --bind 0.0.0.0:${PORT} --workers 1 --threads 4 --timeout 300
+# Shell form so ${PORT} expands; exec makes gunicorn PID 1 so `docker stop` reaches it.
+CMD exec gunicorn backend.server:app --bind 0.0.0.0:${PORT} --workers 1 --threads 4 --timeout 300

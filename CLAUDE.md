@@ -35,6 +35,8 @@ The server and DB can be run locally, in Docker, or on a public host (e.g. Pytho
 - `requirements.txt` — Runtime dependencies (Flask, Google API, python-dotenv, gunicorn); `requirements-dev.txt` — adds pytest
 - `.env.example` — template for the optional project-root `.env` (DO NOT commit the real `.env`)
 - `Dockerfile`, `docker-compose.yml`, `.dockerignore` — container image (gunicorn, one worker, non-root uid 1000, data in `/data`) and compose service `app` bind-mounting `./data`
+- `docs/superpowers/` — design specs and implementation plans
+- `.github/workflows/ci.yml` — CI: tests on Python 3.11/3.12 and the Docker image build
 - `README.md`, `CONTRIBUTING.md`, `LICENSE` — user docs (quickstarts, Gmail setup, deployment), contributor guide (adding a bank), MIT license
 - `credentials.json` — Google OAuth credentials (DO NOT commit); in `DATA_DIR` when set
 - `token.json` — OAuth token (DO NOT commit); in `DATA_DIR` when set
@@ -47,7 +49,7 @@ The server and DB can be run locally, in Docker, or on a public host (e.g. Pytho
 - Config is environment-variable driven, set via `os.environ.get(...)` in `backend/constants.py`. `constants.py` first loads a `.env` from the project root with python-dotenv (real env vars win; `ENV_FILE` points at a different file); `.env.example` lists every variable:
   - `API_TOKEN` — shared secret checked on every `/api/*` request. Required: unset means every `/api/*` call gets `503`, locally too.
   - `ADMIN_USERNAME` / `ADMIN_PASSWORD` — seed ONE dashboard user in `init_db` (`_seed_admin_user`) only when both are non-empty and the `users` table is empty. `/api/login` checks the stored `users` row (hashed password), so changing these later has no effect and no code path updates a password; reset by `DELETE FROM users` in the DB, editing `.env` and restarting (Docker: `docker compose up -d --force-recreate`, since compose reads `.env` only when the container is created) (README "Resetting the dashboard login").
-  - `DATA_DIR` — one directory for `finance_tracker.db`, `token.json` and `credentials.json` (the Docker image sets `/data`). Unset keeps the old in-repo paths.
+  - `DATA_DIR` — one directory for `finance_tracker.db`, `token.json` and `credentials.json` (the Docker image sets `/data`). Unset keeps the old in-repo paths. A relative `DATA_DIR` is resolved against the project root and `~` is expanded.
   - `DB_PATH` / `TOKEN_PATH` / `CREDENTIALS_PATH` — override an individual file; win over `DATA_DIR`.
   - `PORT` — port for `python -m backend.server` and the Docker gunicorn (default 5000; `docker-compose.yml` maps 5000:5000, so don't change it there).
   - `TRUST_PROXY` — `true` applies `ProxyFix(x_for=1)` (`apply_proxy_fix`) so `request.remote_addr` is the real client. Only behind a proxy that sets `X-Forwarded-For`; otherwise clients can spoof it to dodge the lockout.
@@ -55,7 +57,6 @@ The server and DB can be run locally, in Docker, or on a public host (e.g. Pytho
   - `OAUTH_BIND_ADDR` — bind address of the Gmail OAuth callback (fixed port `OAUTH_PORT` = 8765); `localhost` by default, `0.0.0.0` in the Docker image so the port can be published.
   - `REMOTE_API_URL` — when set on the machine running `process_transactions`, fetched transactions are POSTed to `<REMOTE_API_URL>/api/transactions` with the bearer token instead of written to a local DB. `409` (duplicate) and `200` (`{"ignored": true}`, an internal transfer) responses are both treated as expected and skipped, and counted separately in the ingestion log.
   - `FLASK_DEBUG` — enables Flask's reloader/debugger when set to `true`. Off by default; only for local development, never on a public host.
-  - `TOKEN_PATH` — overrides where the Gmail OAuth token (`token.json`) is read/written. Needed on a host so `POST /api/sync` can authenticate without the project's default path.
 - Google OAuth credentials (`credentials.json`) are not needed on a host — only `token.json` (for `POST /api/sync`) is, alongside the code. The first interactive OAuth happens via `python -m backend.process_transactions` on a machine with a browser (callback port 8765), then `token.json` is copied into the host's data dir.
 - `POST /api/sync` runs ingestion directly on the host (`run_sync(use_remote=False, interactive=False)`): behind a non-blocking lock (`409` if a sync is already running), and `_authenticate(interactive=False)` never falls back to the interactive OAuth browser flow — a missing/expired/unrefreshable token raises `AuthenticationRequiredError`, mapped to `503` ("re-authenticate locally and upload token.json") instead of hanging.
 - Frontend: `frontend/js/common.js` exposes `apiFetch()`, which sends users without a stored token to `/login` (which posts to `/api/login`), persists the returned token in `localStorage`, attaches it to every request, and clears it and returns to `/login` on a `401`. All page scripts route `/api/*` calls through `apiFetch()` (or `fetchJSON()`, which wraps it) rather than calling `fetch()` directly.
@@ -83,7 +84,6 @@ Ingestion is stateless — there's no per-bank last-run file to sync across mach
 - `/categorize` — Work through uncategorized transactions one at a time, pre-filled with a suggested category and up to 8 kind-filtered one-click chips (keys 1–8), plus a batch "apply to all N remaining from X" action. Nav link shows an uncategorized-count badge.
 - `/transactions` — Side-by-side income/expense tables, independently sortable and searchable, with totals footer, bank/person filters, a removable category chip, CSV export, and click-a-row-to-edit via the shared modal. View state (`month`, `category`, `bank`, `q`, `eq`) lives in the URL.
 - `/settings` — Category management (rename/merge/delete, `kind`, `budget`), savings goal, and ignored-transfer rules — all previously only editable via code/DB.
-
 - `/login` — Sign-in form for the seeded dashboard user (posts to `POST /api/login`)
 
 ## API Endpoints
