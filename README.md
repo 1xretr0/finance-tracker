@@ -131,14 +131,25 @@ Configuration is read from environment variables, optionally loaded from a `.env
 
 ### Resetting the dashboard login
 
-`/api/login` checks the `users` table in the database, not `.env`. Editing `ADMIN_USERNAME`/`ADMIN_PASSWORD` after the first user exists does nothing, and there is no in-app way to change a password. To change it, delete the user, update the two values in `.env`, and restart so the next database initialisation seeds the new user:
+`/api/login` checks the `users` table in the database, not `.env`. Editing `ADMIN_USERNAME`/`ADMIN_PASSWORD` after the first user exists does nothing, and there is no in-app way to change a password. To change it, delete the user, update the two values in `.env`, and restart so the next database initialisation seeds the new user. Both paths below use the `sqlite3` command-line tool on the host (the Docker image does not include it).
+
+Local run (database is `backend/db/finance_tracker.db`, or `$DATA_DIR/finance_tracker.db` if you set `DATA_DIR`):
 
 ```bash
-sqlite3 backend/db/finance_tracker.db "DELETE FROM users"   # or <DATA_DIR>/finance_tracker.db, e.g. data/finance_tracker.db for Docker
-# edit .env, then restart the server (Docker: docker compose restart)
+sqlite3 backend/db/finance_tracker.db "DELETE FROM users"
+# edit ADMIN_USERNAME / ADMIN_PASSWORD in .env, then (re)start the server
+python -m backend.server
 ```
 
-This runs the `sqlite3` command-line tool on the host against the database file (the Docker image does not include it). If `data/` is owned by uid 1000 and you are a different user, prefix the command with `sudo`.
+Docker (database is `data/finance_tracker.db`; `sudo` is needed if `data/` is owned by uid 1000 and you are a different user):
+
+```bash
+sudo sqlite3 data/finance_tracker.db "DELETE FROM users"
+# edit ADMIN_USERNAME / ADMIN_PASSWORD in .env, then recreate the container
+docker compose up -d --force-recreate
+```
+
+Use `up -d --force-recreate` rather than `docker compose restart`: compose reads `.env` when the container is created, so a plain restart keeps the old values.
 
 ## Advanced
 
