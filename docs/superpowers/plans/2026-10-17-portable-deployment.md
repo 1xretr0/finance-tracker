@@ -133,8 +133,8 @@
 
 - [ ] **Step 1: Write failing test** `test_default_ignored_transfer_seed_is_empty`: `assert constants.IGNORED_ACCOUNT_TRANSFERS == []`. Rewrite `test_ignored_transfers_seeded_from_constants` (`tests/test_storage.py:512`) to monkeypatch `storage.IGNORED_ACCOUNT_TRANSFERS` with `[{"account_last4": "5555", "bank": "Example Bank"}]`, init a fresh tmp DB, and assert that rule is present.
 - [ ] **Step 2: Run** the two tests → the new one FAILS.
-- [ ] **Step 3: Implement.** Set `IGNORED_ACCOUNT_TRANSFERS = []` (keep the comment saying it's seed data for the table). Replace the real last-4 values with synthetic ones across `README.md`, `tests/test_storage.py`, `tests/test_santander_parser.py`: `sd '\b6184\b' '5555'`, `sd '\b8275\b' '7777'`, `sd '\b6031\b' '8888'`; review `git diff` so no unrelated number changed. Then `git rm -r --cached .claude -q` (files stay on disk; already in `.gitignore`).
-- [ ] **Step 4: Run** `pytest tests/ -v` → pass. `rg -n "6184|8275|6031" . -g '!.venv' -g '!.git'` → no hits. `git ls-files .claude` → empty.
+- [ ] **Step 3: Implement.** Set `IGNORED_ACCOUNT_TRANSFERS = []` (keep the comment saying it's seed data for the table). Replace the real last-4 values with synthetic ones across `README.md`, `tests/test_storage.py`, `tests/test_santander_parser.py`: `sd '\b<real-1>\b' '5555'`, `sd '\b<real-2>\b' '7777'`, `sd '\b<real-3>\b' '8888'` (the three real last-4 values that the `IGNORED_ACCOUNT_TRANSFERS` seed list contains, in order); review `git diff` so no unrelated number changed. Then `git rm -r --cached .claude -q` (files stay on disk; already in `.gitignore`).
+- [ ] **Step 4: Run** `pytest tests/ -v` → pass. `rg -n "<real-1>|<real-2>|<real-3>" . -g '!.venv' -g '!.git'` → no hits. `git ls-files .claude` → empty.
 - [ ] **Step 5: Commit** `chore: remove personal seed data and stop tracking .claude`.
 
 ---
