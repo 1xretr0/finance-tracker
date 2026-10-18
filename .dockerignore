@@ -1,0 +1,12 @@
+.git
+.venv
+.env
+data
+*.db*
+credentials.json
+token.json
+tests
+docs
+.claude
+.superpowers
+__pycache__
