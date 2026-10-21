@@ -54,7 +54,7 @@ The container has no browser, so the command prints "Please visit this URL to au
 Notes:
 
 - The container runs as uid 1000. On Linux, Docker creates a missing `./data` as root, so create it first and `chown` it as shown (after copying your own files in, since you may not be able to write there afterwards without `sudo`), or the app cannot write the database. Docker Desktop on macOS/Windows is usually not affected.
-- The compose file maps `5000:5000` and the image listens on 5000. Do not set `PORT` in `.env` when using it.
+- The compose file publishes the dashboard on `127.0.0.1:5000` only, so put an HTTPS reverse proxy in front of it, or change `ports:` to `"5000:5000"` if you really want it reachable from other machines. It also pins `DATA_DIR`, `PORT` and `OAUTH_BIND_ADDR` for the container, so values for those in `.env` are ignored.
 - Compose does not publish 8765 by default; the `-p 8765:8765` above is only needed for the one-off authorisation.
 - If Docker runs on a remote machine, `localhost:8765` in your own browser will not reach it. Either tunnel the port (`ssh -L 8765:localhost:8765 user@host`) or authorise on a machine with a browser and copy `token.json` into the data directory.
 - Everything persistent is in `./data` (SQLite database, `token.json`, `credentials.json`). Back it up by copying that directory. `docker compose down && docker compose up -d` keeps your data.
@@ -98,7 +98,7 @@ You can run the server on a VPS or a Python web host so the dashboard is reachab
 
    Use `0.0.0.0` instead of `127.0.0.1` only if your reverse proxy runs on another machine; otherwise plain-HTTP bearer-token traffic would be exposed on port 5000 next to your HTTPS proxy.
 
-   The long timeout is because `POST /api/sync` runs the whole Gmail ingestion inside one request. Put a reverse proxy with HTTPS in front (see [Security notes](#security-notes)).
+   The long timeout is because `POST /api/sync` runs the whole Gmail ingestion inside one request. If a reverse proxy sits in front, raise its read timeout too (for nginx, `proxy_read_timeout 300;`), otherwise "Sync now" can be cut off by the proxy while gunicorn keeps working. Put a reverse proxy with HTTPS in front (see [Security notes](#security-notes)).
 
 ### PythonAnywhere
 
@@ -121,7 +121,7 @@ Configuration is read from environment variables, optionally loaded from a `.env
 |---|---|---|
 | `API_TOKEN` | none (required) | Shared secret sent as `Authorization: Bearer <token>` on every `/api/*` request. If unset the API returns `503`. |
 | `ADMIN_USERNAME`, `ADMIN_PASSWORD` | none | Seed one dashboard user, only when the `users` table is empty. Blank means no user. Changing them later has no effect: `/api/login` checks the stored `users` row (hashed password) and returns `API_TOKEN` to the browser. See [resetting the login](#resetting-the-dashboard-login). |
-| `DATA_DIR` | unset | Directory holding `finance_tracker.db`, `token.json` and `credentials.json`. Unset keeps the in-repo defaults (`backend/db/` for the database, project root for the others). A relative path is resolved against the project root and `~` is expanded. The Docker image sets `/data`. |
+| `DATA_DIR` | unset | Directory holding `finance_tracker.db`, `token.json` and `credentials.json`. Unset keeps the in-repo defaults (`backend/db/` for the database, project root for the others). A relative path is resolved against the project root and `~` is expanded. The Docker image sets `/data`. Setting it on an existing install starts a new, empty database there, so move your existing `finance_tracker.db`, `token.json` and `credentials.json` into the directory first. |
 | `DB_PATH`, `TOKEN_PATH`, `CREDENTIALS_PATH` | inside `DATA_DIR` | Override the location of an individual file. These take precedence over `DATA_DIR`. |
 | `PORT` | `5000` | Port for `python -m backend.server` and for the Docker image's gunicorn. |
 | `TRUST_PROXY` | `false` | Trust one hop of `X-Forwarded-For` so the lockout sees real client IPs. Only behind a reverse proxy. |
