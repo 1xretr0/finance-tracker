@@ -389,7 +389,7 @@ class TestCreateCategory:
 # Test suite: User authentication
 # ---------------------------------------------------------------------------
 class TestGetUser:
-    def _insert_user(self, username="sebas", password_hash="hashed"):
+    def _insert_user(self, username="alice", password_hash="hashed"):
         with _connection() as conn:
             conn.execute(
                 "INSERT INTO users (username, password_hash, created_at) VALUES (?, ?, ?)",
@@ -400,9 +400,9 @@ class TestGetUser:
         assert get_user("nobody") is None
 
     def test_returns_user_row_for_existing_user(self):
-        self._insert_user(username="sebas", password_hash="hashed-pw")
-        user = get_user("sebas")
-        assert user["username"] == "sebas"
+        self._insert_user(username="alice", password_hash="hashed-pw")
+        user = get_user("alice")
+        assert user["username"] == "alice"
         assert user["password_hash"] == "hashed-pw"
 
 # ---------------------------------------------------------------------------

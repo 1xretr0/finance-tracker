@@ -62,7 +62,7 @@ def seed_data():
     ])
 
 
-def seed_user(username="sebas", password="correct-password"):
+def seed_user(username="alice", password="correct-password"):
     with _connection() as conn:
         conn.execute(
             "INSERT INTO users (username, password_hash, created_at) VALUES (?, ?, ?)",
@@ -168,17 +168,17 @@ class TestLoginEndpoint:
     def test_rejects_wrong_password(self):
         seed_user()
         with app.test_client() as unauth_client:
-            res = unauth_client.post("/api/login", json={"username": "sebas", "password": "wrong"})
+            res = unauth_client.post("/api/login", json={"username": "alice", "password": "wrong"})
             assert res.status_code == 401
 
     def test_accepts_correct_credentials_and_returns_token(self):
         seed_user()
         with app.test_client() as unauth_client:
-            res = unauth_client.post("/api/login", json={"username": "sebas", "password": "correct-password"})
+            res = unauth_client.post("/api/login", json={"username": "alice", "password": "correct-password"})
             assert res.status_code == 200
             data = res.get_json()
             assert data["token"] == TEST_API_TOKEN
-            assert data["username"] == "sebas"
+            assert data["username"] == "alice"
 
     def test_login_with_env_seeded_admin(self, tmp_path, monkeypatch):
         monkeypatch.setattr(storage, "DB_PATH", str(tmp_path / "seeded.db"))
@@ -195,19 +195,19 @@ class TestLoginEndpoint:
         # must be reachable without one, despite being under /api/.
         seed_user()
         with app.test_client() as unauth_client:
-            res = unauth_client.post("/api/login", json={"username": "sebas", "password": "correct-password"})
+            res = unauth_client.post("/api/login", json={"username": "alice", "password": "correct-password"})
             assert res.status_code == 200
 
     def test_rejects_missing_fields(self):
         with app.test_client() as unauth_client:
-            res = unauth_client.post("/api/login", json={"username": "sebas"})
+            res = unauth_client.post("/api/login", json={"username": "alice"})
             assert res.status_code == 400
 
     def test_unconfigured_token_rejects_login(self, monkeypatch):
         monkeypatch.setattr(server, "API_TOKEN", None)
         seed_user()
         with app.test_client() as unauth_client:
-            res = unauth_client.post("/api/login", json={"username": "sebas", "password": "correct-password"})
+            res = unauth_client.post("/api/login", json={"username": "alice", "password": "correct-password"})
             assert res.status_code == 503
 
     def test_locks_out_after_repeated_failed_logins(self, monkeypatch):
@@ -216,10 +216,10 @@ class TestLoginEndpoint:
         seed_user()
         with app.test_client() as unauth_client:
             for _ in range(3):
-                res = unauth_client.post("/api/login", json={"username": "sebas", "password": "wrong"})
+                res = unauth_client.post("/api/login", json={"username": "alice", "password": "wrong"})
                 assert res.status_code == 401
 
-            res = unauth_client.post("/api/login", json={"username": "sebas", "password": "correct-password"})
+            res = unauth_client.post("/api/login", json={"username": "alice", "password": "correct-password"})
             assert res.status_code == 429
 
     def test_serves_login_page(self):
