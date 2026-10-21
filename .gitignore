@@ -1,6 +1,8 @@
 # Credentials & tokens
 credentials.json
 token.json
+.env
+data/
 
 # Database
 *.db

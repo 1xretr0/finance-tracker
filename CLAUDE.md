@@ -1,19 +1,19 @@
 # Finance Tracker
 
-Personal finance tracker that aggregates transaction data from multiple bank sources into a unified local dashboard.
+Open-source, self-hosted personal finance tracker that aggregates transaction data from multiple bank sources into a unified dashboard (MIT licensed; see `README.md` for user setup).
 
 ## Architecture
 
-1. **Data Ingestion** — Fetch bank notification emails from Gmail, parse transaction data. Runs locally only (needs Google OAuth credentials); if `REMOTE_API_URL` is set, parsed transactions are pushed to a hosted API over HTTP instead of written to a local DB.
+1. **Data Ingestion** — Fetch bank notification emails from Gmail, parse transaction data. Needs Google OAuth credentials (`credentials.json` for the first interactive auth, then `token.json`); runs from the CLI or, on the server, via `POST /api/sync`. If `REMOTE_API_URL` is set, parsed transactions are pushed to a hosted API over HTTP instead of written to a local DB.
 2. **Storage** — SQLite (`backend/db/finance_tracker.db`), deduplication via unique index
 3. **API Server** — Flask app serving JSON endpoints and the frontend; all `/api/*` routes require a shared-secret bearer token
 4. **Dashboard** — Dark mode HTML/CSS/JS frontend with Chart.js visualizations
 
-The server and DB can be deployed to a public host (e.g. PythonAnywhere) so `/api/transactions` is reachable from outside localhost, while Gmail ingestion keeps running locally and pushes to it. See **Hosting & Auth** below.
+The server and DB can be run locally, in Docker, or on a public host (e.g. PythonAnywhere); Gmail ingestion can run on the host itself ("Sync now") or stay local and push to it. See **Hosting & Auth** below.
 
 ## Tech Stack
 
-- **Backend**: Python, Flask
+- **Backend**: Python, Flask (gunicorn in Docker / on hosts)
 - **Email integration**: Gmail API (OAuth2) to pull bank notification emails
 - **Storage**: SQLite via `sqlite3` (built-in)
 - **Frontend**: HTML, CSS, vanilla JS, Chart.js (CDN)
@@ -24,32 +24,42 @@ The server and DB can be deployed to a public host (e.g. PythonAnywhere) so `/ap
 - `backend/server.py` — Flask API server + static file serving
 - `backend/db/storage.py` — SQLite schema + idempotent migrations, insert, query, summary, category (CRUD, merge, suggestions), recurring-expense detection, settings, ignored-transfer rules, and sync-status functions
 - `backend/constants.py` — Shared constants (tx types, banks, paths, labels, `UPDATABLE_FIELDS`, `SETTINGS_KEYS`, `IGNORED_ACCOUNT_TRANSFERS` seed)
-- `backend/process_transactions.py` — Fetch from Gmail and store (run manually)
+- `backend/process_transactions.py` — Fetch from Gmail and store (run manually); also the first-time Gmail OAuth entry point
 - `backend/banks/santander.py` — Gmail fetcher + parsers for 4 email formats (purchase field-style, purchase narrative, transfer, outgoing_transfer); internal-transfer filtering lives in storage, not here. `_authenticate(interactive)` raises `AuthenticationRequiredError` instead of opening a browser when `interactive=False` (used by `POST /api/sync`)
-- `backend/db/finance_tracker.db` — SQLite database (DO NOT commit)
+- `backend/db/finance_tracker.db` — SQLite database (DO NOT commit); lives in `DATA_DIR` instead when set
 - `frontend/html/` — Page templates (index, categorize, transactions, settings, login)
 - `frontend/css/` — Stylesheets (shared `styles.css` + page-specific: `categorize.css`, `transactions.css`, `settings.css`, `login.css`)
 - `frontend/js/` — Page scripts (`app.js`, `categorize.js`, `transactions.js`, `settings.js`, `login.js`, `common.js`)
 - `frontend/manifest.json`, `frontend/icons/` — PWA manifest and icons (installable home-screen app)
 - `tests/` — pytest suite for parsers, storage, server API, and email body extraction (test data is inline strings, no fixture files)
-- `requirements.txt` — Python dependencies (Flask, Google API, pytest)
-- `credentials.json` — Google OAuth credentials (DO NOT commit)
-- `token.json` — OAuth token (DO NOT commit)
+- `requirements.txt` — Runtime dependencies (Flask, Google API, python-dotenv, gunicorn); `requirements-dev.txt` — adds pytest
+- `.env.example` — template for the optional project-root `.env` (DO NOT commit the real `.env`)
+- `Dockerfile`, `docker-compose.yml`, `.dockerignore` — container image (gunicorn, one worker, non-root uid 1000, data in `/data`) and compose service `app` bind-mounting `./data`
+- `docs/superpowers/` — design specs and implementation plans
+- `.github/workflows/ci.yml` — CI: tests on Python 3.11/3.12 and the Docker image build
+- `README.md`, `CONTRIBUTING.md`, `LICENSE` — user docs (quickstarts, Gmail setup, deployment), contributor guide (adding a bank), MIT license
+- `credentials.json` — Google OAuth credentials (DO NOT commit); in `DATA_DIR` when set
+- `token.json` — OAuth token (DO NOT commit); in `DATA_DIR` when set
 
 ## Hosting & Auth
 
-- All `/api/*` routes require `Authorization: Bearer <API_TOKEN>` ([backend/server.py](backend/server.py)), checked with a constant-time comparison (`hmac.compare_digest`). Page/static routes (`/`, `/categorize`, `/transactions`, static files) stay open. If `API_TOKEN` is unset, `/api/*` is rejected entirely (fail closed, `503`) rather than running open.
-- Failed auth attempts are throttled per source IP (`_failed_attempts` in `backend/server.py`): after `AUTH_MAX_FAILED_ATTEMPTS` failures within `AUTH_LOCKOUT_WINDOW_SECONDS`, further attempts from that IP get `429` without checking the token, until old failures age out of the window. In-memory only — resets on process restart; fine for a single-process personal deployment. If deployed behind a reverse proxy, the proxy must forward the real client IP or all clients will share one lockout bucket.
+- All `/api/*` routes require `Authorization: Bearer <API_TOKEN>` ([backend/server.py](backend/server.py)), checked with a constant-time comparison (`hmac.compare_digest`). Page/static routes (`/`, `/login`, `/categorize`, `/transactions`, static files) stay open. If `API_TOKEN` is unset, `/api/*` is rejected entirely (fail closed, `503`) rather than running open — this applies locally too; there is no "no auth" dev mode. `POST /api/login` (`{username, password}`) is the one exempt route: it returns `API_TOKEN` for a valid user and still counts toward the lockout.
+- Failed auth attempts are throttled per source IP (`_failed_attempts` in `backend/server.py`): after `AUTH_MAX_FAILED_ATTEMPTS` failures within `AUTH_LOCKOUT_WINDOW_SECONDS`, further attempts from that IP get `429` without checking the token, until old failures age out of the window. In-memory only — resets on process restart; fine for a single-process personal deployment. If deployed behind a reverse proxy, set `TRUST_PROXY=true` (and the proxy must set `X-Forwarded-For`) or all clients share one lockout bucket. Because of this in-process state and the sync lock, run exactly ONE worker (the Docker image runs `gunicorn backend.server:app --workers 1 --threads 4 --timeout 300`).
 - `backend/server.py`'s `app.run()` uses `debug=FLASK_DEBUG`, which defaults to off — Flask's interactive debugger allows remote code execution if reached, so it must never be enabled on a publicly reachable host.
-- Config is environment-variable driven, set via `os.environ.get(...)` in `backend/constants.py`:
-  - `API_TOKEN` — shared secret checked on every `/api/*` request. Unset locally by default (no auth in local dev).
-  - `DB_PATH` — overrides the default `backend/db/finance_tracker.db` location (e.g. a persistent dir on a host).
+- Config is environment-variable driven, set via `os.environ.get(...)` in `backend/constants.py`. `constants.py` first loads a `.env` from the project root with python-dotenv (real env vars win; `ENV_FILE` points at a different file); `.env.example` lists every variable:
+  - `API_TOKEN` — shared secret checked on every `/api/*` request. Required: unset means every `/api/*` call gets `503`, locally too.
+  - `ADMIN_USERNAME` / `ADMIN_PASSWORD` — seed ONE dashboard user in `init_db` (`_seed_admin_user`) only when both are non-empty and the `users` table is empty. `/api/login` checks the stored `users` row (hashed password), so changing these later has no effect and no code path updates a password; reset by `DELETE FROM users` in the DB, editing `.env` and restarting (Docker: `docker compose up -d --force-recreate`, since compose reads `.env` only when the container is created) (README "Resetting the dashboard login").
+  - `DATA_DIR` — one directory for `finance_tracker.db`, `token.json` and `credentials.json` (the Docker image sets `/data`). Unset keeps the old in-repo paths. A relative `DATA_DIR` is resolved against the project root and `~` is expanded.
+  - `DB_PATH` / `TOKEN_PATH` / `CREDENTIALS_PATH` — override an individual file; win over `DATA_DIR`.
+  - `PORT` — port for `python -m backend.server` and the Docker gunicorn (default 5000; `docker-compose.yml` pins `PORT=5000`, `DATA_DIR` and `OAUTH_BIND_ADDR` for the container and publishes it on `127.0.0.1:5000`).
+  - `TRUST_PROXY` — `true` applies `ProxyFix(x_for=1)` (`apply_proxy_fix`) so `request.remote_addr` is the real client. Only behind a proxy that sets `X-Forwarded-For`; otherwise clients can spoof it to dodge the lockout.
+  - `GITHUB_WEBHOOK_SECRET` / `DEPLOY_REPO_DIR` / `DEPLOY_RELOAD_FILE` — optional `POST /push` auto-deploy: `404` unless the secret is set; a valid signed `push` event runs `git pull origin main` in `DEPLOY_REPO_DIR` and touches `DEPLOY_RELOAD_FILE` (e.g. a PythonAnywhere WSGI file) to reload.
+  - `OAUTH_BIND_ADDR` — bind address of the Gmail OAuth callback (fixed port `OAUTH_PORT` = 8765); `localhost` by default, `0.0.0.0` in the Docker image so the port can be published.
   - `REMOTE_API_URL` — when set on the machine running `process_transactions`, fetched transactions are POSTed to `<REMOTE_API_URL>/api/transactions` with the bearer token instead of written to a local DB. `409` (duplicate) and `200` (`{"ignored": true}`, an internal transfer) responses are both treated as expected and skipped, and counted separately in the ingestion log.
   - `FLASK_DEBUG` — enables Flask's reloader/debugger when set to `true`. Off by default; only for local development, never on a public host.
-  - `TOKEN_PATH` — overrides where the Gmail OAuth token (`token.json`) is read/written. Needed on a host so `POST /api/sync` can authenticate without the project's default path.
-- Google OAuth credentials (`credentials.json`) and the ingestion script never need to be deployed to the host — only `token.json` (for `POST /api/sync`), `backend/server.py`, `backend/db/storage.py`, `backend/constants.py`, and `frontend/` do.
+- Google OAuth credentials (`credentials.json`) are not needed on a host — only `token.json` (for `POST /api/sync`) is, alongside the code. The first interactive OAuth happens via `python -m backend.process_transactions` on a machine with a browser (callback port 8765), then `token.json` is copied into the host's data dir.
 - `POST /api/sync` runs ingestion directly on the host (`run_sync(use_remote=False, interactive=False)`): behind a non-blocking lock (`409` if a sync is already running), and `_authenticate(interactive=False)` never falls back to the interactive OAuth browser flow — a missing/expired/unrefreshable token raises `AuthenticationRequiredError`, mapped to `503` ("re-authenticate locally and upload token.json") instead of hanging.
-- Frontend: `frontend/js/common.js` exposes `apiFetch()`, which prompts for the token on first use, persists it in `localStorage`, attaches it to every request, and clears it on a `401`. All page scripts route `/api/*` calls through `apiFetch()` (or `fetchJSON()`, which wraps it) rather than calling `fetch()` directly.
+- Frontend: `frontend/js/common.js` exposes `apiFetch()`, which sends users without a stored token to `/login` (which posts to `/api/login`), persists the returned token in `localStorage`, attaches it to every request, and clears it and returns to `/login` on a `401`. All page scripts route `/api/*` calls through `apiFetch()` (or `fetchJSON()`, which wraps it) rather than calling `fetch()` directly.
 
 ## Multi-Bank Design
 
@@ -60,11 +70,13 @@ Ingestion is stateless — there's no per-bank last-run file to sync across mach
 ## Commands
 
 - Activate venv: `source .venv/bin/activate`
-- Start dashboard: `python -m backend.server` (serves at http://localhost:5000)
-- Fetch new transactions: `python -m backend.process_transactions`
+- Install: `pip install -r requirements.txt` (runtime) or `pip install -r requirements-dev.txt` (adds pytest)
+- Start dashboard: `python -m backend.server` (serves at http://localhost:5000, or `PORT`; needs `API_TOKEN` in the env or `.env`)
+- Fetch new transactions: `python -m backend.process_transactions` (first run does the interactive Gmail OAuth)
+- Docker: `docker compose up -d`; first-time Gmail auth: `docker compose run --rm -p 8765:8765 app python -m backend.process_transactions`. Needs `cp .env.example .env` first, and on Linux `./data` chowned to `1000:1000`
 - Run tests: `pytest tests/ -v`
 - Run tests with output: `pytest tests/ -v -s`
-- Query DB directly: `sqlite3 backend/db/finance_tracker.db`
+- Query DB directly: `sqlite3 backend/db/finance_tracker.db` (or `$DATA_DIR/finance_tracker.db`)
 
 ## Dashboard Pages
 
@@ -72,9 +84,11 @@ Ingestion is stateless — there's no per-bank last-run file to sync across mach
 - `/categorize` — Work through uncategorized transactions one at a time, pre-filled with a suggested category and up to 8 kind-filtered one-click chips (keys 1–8), plus a batch "apply to all N remaining from X" action. Nav link shows an uncategorized-count badge.
 - `/transactions` — Side-by-side income/expense tables, independently sortable and searchable, with totals footer, bank/person filters, a removable category chip, CSV export, and click-a-row-to-edit via the shared modal. View state (`month`, `category`, `bank`, `q`, `eq`) lives in the URL.
 - `/settings` — Category management (rename/merge/delete, `kind`, `budget`), savings goal, and ignored-transfer rules — all previously only editable via code/DB.
+- `/login` — Sign-in form for the seeded dashboard user (posts to `POST /api/login`)
 
 ## API Endpoints
 
+- `POST /api/login` — `{username, password}` → `{token, username}`; the only `/api/*` route that doesn't need the bearer token (`503` if `API_TOKEN` unset, `401` on bad credentials)
 - `GET /api/transactions` — all transactions (filters: `bank`, `type`, `start_date`, `end_date`, `person`)
 - `GET /api/summary` — totals grouped by type (filters: `start_date`, `end_date`)
 - `GET /api/monthly` — monthly totals by type (filters: `start_date`, `end_date`)
@@ -100,7 +114,10 @@ Ingestion is stateless — there's no per-bank last-run file to sync across mach
 
 - Keep it simple — this is a personal tool, not production software
 - Credentials and DB must never be committed to git
-- Never log or commit `API_TOKEN`; treat it like `credentials.json`/`token.json`
+- Never log or commit `API_TOKEN`; treat it like `credentials.json`/`token.json`. No personal data (real names, account digits, emails, hostnames) in code, tests, docs or seed data — use placeholders like `example.com` and `1234`
+- New config goes through `backend/constants.py` (env var + default) and gets a line in `.env.example` and the README configuration table
+- Docs and code comments are in English
+- The server must run with a single worker (in-process lockout and sync lock)
 - Any new frontend JS that touches `/api/*` must call it through `apiFetch()`/`fetchJSON()` in `common.js`, not raw `fetch()`
 - Any string rendered via `innerHTML` (e.g. from `dataset.*`, which is already HTML-decoded) must be passed through `escapeHTML()` first
 - Each bank parser returns dicts with at minimum: `bank`, `type`, `amount`, `currency`, `date`

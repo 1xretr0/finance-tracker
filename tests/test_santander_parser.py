@@ -299,7 +299,7 @@ Notificación Transferencia Interbancaria a través de SuperMóvil.
 
 Apreciable JUAN PEREZ GARCIA
 
-Le informamos que recibimos su solicitud para realizar una transferencia, de su cuenta terminación 1234, a la cuenta terminación 6184 en Mercado Pago W por un importe de $ 12000.00 el 16/Jun/2026 a las 22:59, con la referencia 4392728.
+Le informamos que recibimos su solicitud para realizar una transferencia, de su cuenta terminación 1234, a la cuenta terminación 5555 en Mercado Pago W por un importe de $ 12000.00 el 16/Jun/2026 a las 22:59, con la referencia 4392728.
 """
 
 # ---------------------------------------------------------------------------
@@ -343,7 +343,7 @@ class TestOutgoingTransferParser:
         # the parser itself should still parse these emails normally.
         tx = parse_transaction(IGNORED_OUTGOING_TRANSFER_EMAIL)
         assert tx is not None
-        assert tx["dest_account_last4"] == "6184"
+        assert tx["dest_account_last4"] == "5555"
         assert tx["dest_bank"] == "Mercado Pago W"
 
     def test_parses_transfer_to_stp(self):
@@ -352,11 +352,11 @@ Notificación Transferencia Interbancaria a través de SuperMóvil.
 
 Apreciable JUAN PEREZ GARCIA
 
-Le informamos que recibimos su solicitud para realizar una transferencia, de su cuenta terminación 1234, a la cuenta terminación 8275 en STP por un importe de $ 1500.00 el 10/Jun/2026 a las 11:00, con la referencia 9999999.
+Le informamos que recibimos su solicitud para realizar una transferencia, de su cuenta terminación 1234, a la cuenta terminación 7777 en STP por un importe de $ 1500.00 el 10/Jun/2026 a las 11:00, con la referencia 9999999.
 """
         tx = parse_transaction(email)
         assert tx is not None
-        assert tx["dest_account_last4"] == "8275"
+        assert tx["dest_account_last4"] == "7777"
         assert tx["dest_bank"] == "STP"
 
     def test_amount_with_thousands(self):
@@ -377,7 +377,7 @@ Datos de la operación
 Fecha: 15/06/2026
 Hora: 10:00 hrs
 Banco emisor: Mercado Pago W
-Cuenta origen:6184
+Cuenta origen:5555
 Clave de rastreo: MP123456
 Concepto de pago:REEMBOLSO
 """
@@ -392,11 +392,11 @@ class TestIncomingTransferIgnoreList:
         tx = parse_transaction(IGNORED_INCOMING_TRANSFER_EMAIL)
         assert tx is not None
         assert tx["sender_bank"] == "Mercado Pago W"
-        assert tx["source_account"] == "6184"
+        assert tx["source_account"] == "5555"
 
     def test_does_not_ignore_unknown_sender(self):
         email = IGNORED_INCOMING_TRANSFER_EMAIL.replace(
-            "Banco emisor: Mercado Pago W\nCuenta origen:6184",
+            "Banco emisor: Mercado Pago W\nCuenta origen:5555",
             "Banco emisor: BANAMEX\nCuenta origen:9999",
         )
         tx = parse_transaction(email)
@@ -469,19 +469,19 @@ class TestOutgoingTransferConfirmationParser:
         # the parser itself should still parse these emails normally.
         email = OUTGOING_TRANSFER_CONFIRMATION_EMAIL.replace(
             "terminación 1306 en BBVA MEXICO",
-            "terminación 6184 en Mercado Pago W"
+            "terminación 5555 en Mercado Pago W"
         )
         tx = parse_transaction(email)
         assert tx is not None
-        assert tx["dest_account_last4"] == "6184"
+        assert tx["dest_account_last4"] == "5555"
         assert tx["dest_bank"] == "Mercado Pago W"
 
     def test_parses_transfer_to_stp(self):
         email = OUTGOING_TRANSFER_CONFIRMATION_EMAIL.replace(
             "terminación 1306 en BBVA MEXICO",
-            "terminación 8275 en STP"
+            "terminación 7777 en STP"
         )
         tx = parse_transaction(email)
         assert tx is not None
-        assert tx["dest_account_last4"] == "8275"
+        assert tx["dest_account_last4"] == "7777"
         assert tx["dest_bank"] == "STP"

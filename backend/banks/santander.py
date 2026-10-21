@@ -5,6 +5,7 @@ import logging
 import os
 import re
 import base64
+import webbrowser
 from datetime import datetime
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -27,6 +28,8 @@ from backend.constants import (
 	GMAIL_LABEL_SANTANDER,
 	TOKEN_FILE,
 	CREDENTIALS_FILE,
+	OAUTH_PORT,
+	OAUTH_BIND_ADDR,
 	DATE_FORMAT_TX,
 	MONTHS_ES,
 	PATTERN_INCOMING_TRANSFER_UPPER,
@@ -133,7 +136,15 @@ def _authenticate(interactive: bool = True):
 			flow = InstalledAppFlow.from_client_secrets_file(
 				CREDENTIALS_FILE, GMAIL_SCOPES
 			)
-			creds = flow.run_local_server(port=0)
+			# Headless containers have no browser and the library raises before printing the URL.
+			try:
+				webbrowser.get()
+				open_browser = True
+			except webbrowser.Error:
+				open_browser = False
+			creds = flow.run_local_server(
+				port=OAUTH_PORT, bind_addr=OAUTH_BIND_ADDR, open_browser=open_browser
+			)
 		else:
 			raise AuthenticationRequiredError(
 				"No valid Gmail token and interactive auth is disabled; "

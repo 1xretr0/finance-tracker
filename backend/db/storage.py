@@ -1,13 +1,18 @@
 # ---------------------------------------------------------------------------
 # SQLite storage layer for transaction data
 # ---------------------------------------------------------------------------
+import os
 import sqlite3
 import statistics
 from collections import defaultdict
 from contextlib import contextmanager
 from datetime import datetime, timezone
 
+from werkzeug.security import generate_password_hash
+
 from backend.constants import (
+    ADMIN_PASSWORD,
+    ADMIN_USERNAME,
     CURRENCY_MXN,
     DB_PATH,
     DEFAULT_CATEGORY,
@@ -102,7 +107,22 @@ def _backfill_category_kinds(conn: sqlite3.Connection) -> None:
 # ---------------------------------------------------------------------------
 # Schema initialization
 # ---------------------------------------------------------------------------
+def _seed_admin_user(conn: sqlite3.Connection) -> None:
+    """Creates the first dashboard user from ADMIN_USERNAME/ADMIN_PASSWORD,
+    only when both are non-empty and no user exists yet."""
+    if not ADMIN_USERNAME or not ADMIN_PASSWORD:
+        return
+    if conn.execute("SELECT COUNT(*) as n FROM users").fetchone()["n"] == 0:
+        # OR IGNORE: the unique username covers two processes racing to seed.
+        conn.execute(
+            "INSERT OR IGNORE INTO users (username, password_hash, created_at) VALUES (?, ?, ?)",
+            (ADMIN_USERNAME, generate_password_hash(ADMIN_PASSWORD),
+             datetime.now(timezone.utc).isoformat()),
+        )
+
+
 def init_db():
+    os.makedirs(os.path.dirname(DB_PATH) or ".", exist_ok=True)
     with _connection() as conn:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS transactions (
@@ -153,6 +173,7 @@ def init_db():
                 created_at TEXT NOT NULL
             )
         """)
+        _seed_admin_user(conn)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS settings (
                 key TEXT PRIMARY KEY,

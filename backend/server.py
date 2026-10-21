@@ -12,6 +12,7 @@ from collections import defaultdict, deque
 from datetime import datetime
 
 from flask import Flask, jsonify, request, send_from_directory
+from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash
 
 from backend.db.storage import (
@@ -51,10 +52,25 @@ from backend.constants import (
     TX_TYPES_SET,
     BANKS_SET,
     SETTINGS_KEYS,
-    WSGI_PATH
+    TRUST_PROXY,
+    DEPLOY_REPO_DIR,
+    DEPLOY_RELOAD_FILE,
 )
 
 app = Flask(__name__, static_folder=None)
+
+
+def apply_proxy_fix(flask_app, enabled):
+    """Trust one proxy hop's X-Forwarded-For so request.remote_addr is the real client.
+
+    Off by default: without a proxy, a client-supplied X-Forwarded-For would
+    let it dodge the per-IP login lockout.
+    """
+    if enabled:
+        flask_app.wsgi_app = ProxyFix(flask_app.wsgi_app, x_for=1)
+
+
+apply_proxy_fix(app, TRUST_PROXY)
 
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
 HTML_DIR = os.path.join(FRONTEND_DIR, "html")
@@ -491,24 +507,29 @@ def verify_signature(payload, signature_header, secret):
     if not signature_header:
         return False
 
-    # Header comes in as 'sha256=<hash>'
-    sha_type, signature = signature_header.split('=')
+    # Header comes in as 'sha256=<hash>'; partition never raises on a malformed value
+    sha_type, _, signature = signature_header.partition('=')
     if sha_type != 'sha256':
         return False
 
     mac = hmac.new(secret.encode('utf-8'), msg=payload, digestmod=hashlib.sha256)
-    return hmac.compare_digest(mac.hexdigest(), signature)
+    # Compare bytes: str compare_digest raises TypeError on non-ASCII (headers are latin-1)
+    return hmac.compare_digest(mac.hexdigest().encode(), signature.encode('utf-8', 'surrogateescape'))
 
 def trigger_reload():
-    """Waits for the HTTP response to be sent to GitHub, then reloads WSGI."""
+    """Waits for the HTTP response to be sent to GitHub, then reloads the app."""
     time.sleep(1)
 
-    # Touching the WSGI file reloads PythonAnywhere web apps automatically
-    if os.path.exists(WSGI_PATH):
-        os.utime(WSGI_PATH, None)
+    # Touching DEPLOY_RELOAD_FILE (e.g. a PythonAnywhere WSGI file) makes the host reload
+    if DEPLOY_RELOAD_FILE and os.path.exists(DEPLOY_RELOAD_FILE):
+        os.utime(DEPLOY_RELOAD_FILE, None)
 
 @app.route('/push', methods=['POST'])
 def webhook():
+    # 0. Feature is off unless a secret is configured (checked before the signature)
+    if not GITHUB_WEBHOOK_SECRET:
+        return jsonify({"error": "Not found"}), 404
+
     # 1. Verify HMAC Signature
     signature = request.headers.get('X-Hub-Signature-256')
     if not verify_signature(request.data, signature, GITHUB_WEBHOOK_SECRET):
@@ -522,8 +543,14 @@ def webhook():
         return jsonify({"message": f"Event {event} ignored"}), 200
 
     # 3. Pull latest code and trigger asynchronous reload
+    if not DEPLOY_REPO_DIR:
+        return jsonify({
+            "status": "error",
+            "message": "DEPLOY_REPO_DIR is not set; cannot pull"
+        }), 500
+
     try:
-        repo_dir = "/home/retr0py/finance-tracker"
+        repo_dir = DEPLOY_REPO_DIR
         pull_output = subprocess.check_output(
             ["git", "pull", "origin", "main"],
             cwd=repo_dir,

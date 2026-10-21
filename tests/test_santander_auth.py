@@ -4,6 +4,7 @@
 # server must never trigger InstalledAppFlow.run_local_server, since there's
 # no browser to complete that flow on a headless host.
 # ---------------------------------------------------------------------------
+import webbrowser
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -33,6 +34,38 @@ class TestInteractiveAuthentication:
         mock_from_secrets.assert_called_once()
         fake_flow.run_local_server.assert_called_once()
         assert creds is fake_creds
+
+    def test_interactive_flow_uses_fixed_port_and_bind_addr(self, monkeypatch):
+        monkeypatch.setattr(santander, "OAUTH_BIND_ADDR", "0.0.0.0")
+        fake_creds = MagicMock(valid=True)
+        fake_creds.to_json.return_value = "{}"
+        fake_flow = MagicMock()
+        fake_flow.run_local_server.return_value = fake_creds
+        with patch.object(
+            santander.InstalledAppFlow, "from_client_secrets_file", return_value=fake_flow
+        ), patch.object(santander.webbrowser, "get"):
+            _authenticate(interactive=True)
+        fake_flow.run_local_server.assert_called_once_with(
+            port=8765, bind_addr="0.0.0.0", open_browser=True
+        )
+
+    def test_headless_without_browser_does_not_open_browser(self, monkeypatch):
+        # The library calls webbrowser.get() before printing the URL and raises
+        # in a browserless container, so we must opt out and let it print the URL.
+        monkeypatch.setattr(santander, "OAUTH_BIND_ADDR", "0.0.0.0")
+        fake_creds = MagicMock(valid=True)
+        fake_creds.to_json.return_value = "{}"
+        fake_flow = MagicMock()
+        fake_flow.run_local_server.return_value = fake_creds
+        with patch.object(
+            santander.InstalledAppFlow, "from_client_secrets_file", return_value=fake_flow
+        ), patch.object(
+            santander.webbrowser, "get", side_effect=webbrowser.Error("no browser")
+        ):
+            _authenticate(interactive=True)
+        fake_flow.run_local_server.assert_called_once_with(
+            port=8765, bind_addr="0.0.0.0", open_browser=False
+        )
 
     def test_refreshes_expired_token_without_needing_interactive(self, tmp_path):
         token_path = tmp_path / "token.json"
